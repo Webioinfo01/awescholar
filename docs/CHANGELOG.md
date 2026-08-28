@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.2.0
+
+Backfill release — a new `updater backfill` command recovers missing affiliation/team fields from three web sources, and archive merges stop duplicating papers across categories.
+
+### Highlights
+
+- New `awescholar updater backfill` command fills empty affiliation/team fields in an existing archive, consulting three sources cheapest-per-coverage first: Semantic Scholar batch endpoints (covers names and teams well), Crossref per-DOI work metadata, and OpenAlex curated institution data. Only empty fields are filled, entries never move between categories, and the affiliation always comes from the same author as the team so the pair can never mismatch; the archive is backed up first unless `--no-backup`
+- Backfill reliability fixes: paper batches now request `externalIds` (missing DOIs were the real cause of all-null batch results) and all-empty batch responses are retried instead of trusted
+- Pathological affiliation blobs from Crossref deposits (worst live case: 710 chars of department + address + author biography) are shortened at write time — values over 200 chars keep only segments naming an institution, max two, capped at 160 chars
+- Archive merge now deduplicates globally across categories by DOI, falling back to normalized-title match for papers without a DOI (which also backfills the DOI onto the existing entry) — previously dedup was per-category by DOI only, so the same paper could appear under two categories
+- `updater search` accepts `--category` to add papers to a specific category (normalized to an existing spelling, default remains the first category), and its dedup matches titles case/whitespace-insensitively
+- New regression test suites for backfill, record dedup, and merge behavior
+
 ## v0.1.9
 
 Dependency-health release — minimum Python 3.11, verified dependency floors, leaner install, and CI hardening.
