@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.1.8
+
+Bugfix release — restore the author affiliation data chain that silently broke paper filtering.
+
+### Highlights
+
+- Fix: author detail lookups failed silently on every search — `get_authors` returns objects, not dicts, so the affiliations lookup threw and the exception was swallowed. Author names and affiliations are now fetched and stored correctly (as JSON in the `authors` field)
+- Fix: the filter step now receives real `affiliation` values (extracted from stored author data) instead of always-empty strings — the filterer's top ranking priority (premier venues and institutions) finally has data to work with
+- Fix: papers loaded from the DB (`skip_search` / `crawler annotate`) now include the `authors` field so team and affiliation extraction also works on resumed runs
+- Fix: README table sorting pads unpadded months, so `2025.3` no longer sorts after `2025.12`
+- Fix: RSS `lastBuildDate` is now UTC instead of local time labeled as GMT
+- Chore: remove unused import, fix `_split_sections` docstring; new regression tests for search persistence, affiliation extraction, and filter payload
+
 ## v0.1.7
 
 Documentation restructure — AI agent usage guide, install/usage flow, and contributing docs.

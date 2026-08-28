@@ -113,7 +113,12 @@ def run_filter(
     minimal = {}
     for cat, papers in structured_data.items():
         minimal[cat] = [
-            {"doi": p["doi"], "title": p["title"], "venue": p.get("venue", ""), "affiliation": ""}
+            {
+                "doi": p["doi"],
+                "title": p["title"],
+                "venue": p.get("venue", ""),
+                "affiliation": p.get("affiliation", ""),
+            }
             for p in papers
         ]
 
@@ -284,7 +289,8 @@ def run_pipeline(
         if not db_papers:
             raise RuntimeError("No papers in database. Run search first.")
         papers = [
-            {"doi": p.doi, "title": p.title, "abstract": p.abstract, "venue": p.venue}
+            {"doi": p.doi, "title": p.title, "abstract": p.abstract, "venue": p.venue,
+             "authors": p.authors}
             for p in db_papers
         ]
     else:

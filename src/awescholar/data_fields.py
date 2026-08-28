@@ -61,7 +61,8 @@ def first_present(data: dict, *keys: str, default: str = ""):
 def _extract_team_name(authors: str) -> str:
     """Extract author name from the stored authors string.
 
-    The search step stores authors as str(dict) e.g. "{'name': 'Yutaka Saito'}".
+    The search step stores authors as a JSON string, e.g.
+    '{"name": "Yutaka Saito", "affiliations": ["The University of Tokyo"]}'.
     """
     if not authors:
         return ""
@@ -69,7 +70,22 @@ def _extract_team_name(authors: str) -> str:
         try:
             parsed = ast.literal_eval(authors)
             if isinstance(parsed, dict):
-                return parsed.get("name", "")
+                return parsed.get("name") or ""
+        except (ValueError, SyntaxError):
+            return ""
+    return ""
+
+
+def _extract_affiliation(authors: str) -> str:
+    """Extract affiliations from the stored authors string, joined for display."""
+    if not authors:
+        return ""
+    if isinstance(authors, str):
+        try:
+            parsed = ast.literal_eval(authors)
+            if isinstance(parsed, dict):
+                affiliations = parsed.get("affiliations") or []
+                return ", ".join(a for a in affiliations if a)
         except (ValueError, SyntaxError):
             return ""
     return ""
@@ -84,6 +100,9 @@ def normalize_paper(paper: dict, fields: tuple) -> dict:
     # Extract team from authors if not already set
     if not entry.get("team"):
         entry["team"] = _extract_team_name(paper.get("authors", ""))
+
+    if not entry.get("affiliation"):
+        entry["affiliation"] = _extract_affiliation(paper.get("authors", ""))
 
     year = entry.get("year")
     if isinstance(year, str) and len(year) >= 7:

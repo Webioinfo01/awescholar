@@ -234,6 +234,67 @@ def test_run_annotate_outputs_project_data_fields(monkeypatch):
     assert paper["doi"] == "10.1101/2025.05.30.656746"
 
 
+def test_run_annotate_extracts_team_and_affiliation_from_authors(monkeypatch):
+    def fake_complete(**kwargs):
+        return AnnotationResult(
+            paper_list=[
+                PaperAnnotation(doi="10.1/a", domain="Agents", category="AI Agents")
+            ],
+            category_list=["AI Agents"],
+        )
+
+    monkeypatch.setattr(pipeline, "complete", fake_complete)
+
+    structured = pipeline.run_annotate(
+        papers=[
+            {
+                "doi": "10.1/a",
+                "title": "Paper A",
+                "abstract": "",
+                "authors": '{"name": "Yutaka Saito", "affiliations": ["The University of Tokyo"]}',
+            }
+        ],
+        model="openai/test-model",
+        categories=["AI Agents"],
+    )
+
+    paper = structured["AI Agents"][0]
+    assert paper["team"] == "Yutaka Saito"
+    assert paper["affiliation"] == "The University of Tokyo"
+
+
+def test_run_filter_sends_affiliation_to_llm(monkeypatch):
+    captured = {}
+
+    def fake_complete(*, system, user, **kwargs):
+        captured["payload"] = json.loads(user)
+        return FilterResult(
+            papers={
+                "AI Agents": [
+                    FilteredPaper(doi="10.1/a", title="Paper A", venue="TestConf", reason="ok")
+                ]
+            }
+        )
+
+    monkeypatch.setattr(pipeline, "complete", fake_complete)
+
+    pipeline.run_filter(
+        {
+            "AI Agents": [
+                {
+                    "doi": "10.1/a",
+                    "title": "Paper A",
+                    "venue": "TestConf",
+                    "affiliation": "Stanford University",
+                }
+            ]
+        },
+        model="openai/test-model",
+    )
+
+    assert captured["payload"]["papers"]["AI Agents"][0]["affiliation"] == "Stanford University"
+
+
 def test_run_filter_preserves_project_data_fields(monkeypatch):
     def fake_complete(**kwargs):
         return FilterResult(
