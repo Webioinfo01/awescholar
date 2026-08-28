@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.1.9
+
+Dependency-health release — minimum Python 3.11, verified dependency floors, leaner install, and CI hardening.
+
+### Highlights
+
+- Require Python >= 3.11: litellm 1.98.0 (2026-08-22) imports `typing.NotRequired` (3.11+) while its metadata still claims 3.10 support, so fresh installs on 3.10 were broken; 3.10 reaches end-of-life in October 2026. CI matrix is now 3.11/3.12/3.13
+- Dependencies declare tested lower bounds (`litellm>=1.86`, `semanticscholar>=0.12`, `sqlalchemy>=2.0`, `python-dotenv>=1.0`) — pip can no longer resolve to untested ancient versions
+- Drop unused `rich` dependency — never imported by awescholar (litellm brings its own); one less upstream to break
+- CI now runs `ruff check` alongside pytest, on Node 24 action versions (`checkout@v7`, `setup-python@v7`, `action-gh-release@v3`) — removes the Node.js 20 deprecation warning
+- README version badges are now dynamic PyPI badges — no more manual badge bumps at release time (the Chinese README badge had drifted to v0.1.6)
+- Remove the `tomli` test fallback and dev dependency — 3.11+ always has `tomllib`
+
 ## v0.1.8
 
 Bugfix release — restore the author affiliation data chain that silently broke paper filtering.
