@@ -62,6 +62,7 @@ def _patch_scholar(papers, author_details, crossref=None):
             patch("awescholar.backfill.SemanticScholar", return_value=client),
             patch("awescholar.backfill._crossref_last_author",
                   side_effect=lambda doi: crossref.get(doi) if crossref else None),
+            patch("awescholar.backfill._openalex_last_authors", return_value={}),
         ):
             yield
 
@@ -260,3 +261,33 @@ def test_backfill_crossref_unknown_doi_is_skipped_quietly():
         assert entry["affiliation"] == ""          # stays empty, no crash
         assert entry["team"] == "Anon"             # team still came from SS
         assert stats["filled_affiliations"] == 0
+
+
+def test_backfill_openalex_covers_what_crossref_lacks():
+    with tempfile.TemporaryDirectory() as tmp:
+        archive = os.path.join(tmp, "data.json")
+        _write_archive(archive, {
+            "AI Agents": [
+                {"doi": "10.1/known", "title": "Known", "team": "Qi Liu",
+                 "affiliation": "Princeton University"},
+                {"doi": "10.1/new", "title": "New", "team": "", "affiliation": ""},
+            ]
+        })
+        papers = [FakePaper("10.1/new", [FakeAuthorRef("A9", "Liu Qi")])]
+        details = {"A9": FakeAuthorDetail("A9", "Qi Liu", [])}
+        crossref = {"10.1/new": {"name": "QI LIU", "affiliations": []}}  # has name, no affiliation
+
+        @contextmanager
+        def openalex_stub():
+            with patch("awescholar.backfill._openalex_last_authors",
+                       return_value={"10.1/new": {"name": "QI LIU",
+                                                  "affiliations": ["Broad Institute"]}}):
+                yield
+
+        with _patch_scholar(papers, details, crossref), openalex_stub():
+            stats = backfill_affiliations(archive, no_backup=True)
+
+        entry = _read_archive(archive)["AI Agents"][1]
+        assert entry["team"] == "Qi Liu"              # curated form reused (via crossref pass)
+        assert entry["affiliation"] == "Broad Institute"
+        assert stats["filled_affiliations"] == 1

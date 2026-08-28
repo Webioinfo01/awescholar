@@ -312,7 +312,7 @@ def main() -> int:
     p = updater_sub.add_parser("add", help="Interactively add a single record to project data JSON")
     p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")
 
-    p = updater_sub.add_parser("backfill", help="Fill missing affiliation/team fields from Semantic Scholar")
+    p = updater_sub.add_parser("backfill", help="Fill missing affiliation/team fields (Semantic Scholar, Crossref, OpenAlex)")
     p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")
     p.add_argument("--no-backup", action="store_true", help="Do not create a backup of the archive before updating")
 

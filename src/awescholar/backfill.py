@@ -1,10 +1,11 @@
 """Backfill missing affiliation/team fields in an archive from the web.
 
-Two sources are consulted, cheapest-per-coverage first:
+Three sources are consulted, cheapest-per-coverage first:
 1. Semantic Scholar — batch endpoints (papers, then authors); covers names
    and teams well, affiliations poorly.
-2. Crossref — per-DOI work metadata; the primary source for author
-   affiliations (publisher-deposited).
+2. Crossref — per-DOI work metadata; publisher-deposited affiliations.
+3. OpenAlex — batched DOI lookup; curated institution data that covers
+   many works Crossref lacks.
 
 Only empty fields are filled, entries never move between categories, and
 the affiliation always comes from the same author as the team, so the
@@ -14,6 +15,7 @@ pair can never mismatch.
 import json
 import shutil
 import time
+import urllib.parse
 import urllib.request
 from datetime import datetime
 
@@ -27,6 +29,10 @@ BATCH_PAUSE_SECONDS = 1.0
 CROSSREF_PAUSE_SECONDS = 0.4
 CROSSREF_TIMEOUT_SECONDS = 15
 CROSSREF_URL = "https://api.crossref.org/works/{doi}"
+OPENALEX_PER_BATCH = 50
+OPENALEX_TIMEOUT_SECONDS = 20
+OPENALEX_URL = "https://api.openalex.org/works"
+OPENALEX_UA = "awescholar-backfill (https://github.com/Webioinfo01/awescholar)"
 
 
 def _chunk(items, size):
@@ -69,6 +75,35 @@ def _plan_team(authors, entry, trusted):
     return authors[-1], None
 
 
+def _scan_archive(archive: dict) -> tuple[dict, list]:
+    """Trusted-name map and entries still missing an affiliation (with a DOI)."""
+    trusted: dict[str, str] = {}
+    missing = []
+    for papers in archive.values():
+        for p in papers:
+            if p.get("team"):
+                trusted.setdefault(normalize_name(p["team"]), p["team"])
+            if not p.get("affiliation") and p.get("doi"):
+                missing.append(p)
+    return trusted, missing
+
+
+def _apply_last_author(entry: dict, author: dict, trusted: dict) -> tuple[bool, bool]:
+    """Fill empty team/affiliation from a {name, affiliations} author dict.
+
+    The curated form of a known author name wins over the fetched form.
+    Returns (team_filled, affiliation_filled).
+    """
+    filled_team = filled_affiliation = False
+    if not entry.get("team") and author.get("name"):
+        entry["team"] = trusted.get(normalize_name(author["name"]), author["name"])
+        filled_team = True
+    if not entry.get("affiliation") and author.get("affiliations"):
+        entry["affiliation"] = format_affiliations(author["affiliations"])
+        filled_affiliation = True
+    return filled_team, filled_affiliation
+
+
 def _crossref_last_author(doi: str) -> dict | None:
     """Fetch a work from Crossref and return its last author entry.
 
@@ -93,6 +128,43 @@ def _crossref_last_author(doi: str) -> dict | None:
         "name": name.strip(),
         "affiliations": [a.get("name") for a in last.get("affiliation", []) if a.get("name")],
     }
+
+
+def _openalex_last_authors(dois: list[str]) -> dict[str, dict]:
+    """Batch-fetch last-author {name, affiliations} per DOI from OpenAlex.
+
+    Unreachable/throttled batches are skipped and reported by absence —
+    OpenAlex is a best-effort third source, not a requirement.
+    """
+    out: dict[str, dict] = {}
+    for chunk in _chunk(dois, OPENALEX_PER_BATCH):
+        flt = "|".join(f"https://doi.org/{d}" for d in chunk)
+        url = (
+            f"{OPENALEX_URL}?filter=doi:{urllib.parse.quote(flt, safe='')}"
+            f"&per-page={OPENALEX_PER_BATCH}&select=doi,authorships"
+        )
+        req = urllib.request.Request(url, headers={"User-Agent": OPENALEX_UA})
+        try:
+            with urllib.request.urlopen(req, timeout=OPENALEX_TIMEOUT_SECONDS) as resp:
+                results = json.load(resp).get("results", [])
+        except Exception:  # noqa: BLE001 — rate-limit/offline skips this batch
+            time.sleep(BATCH_PAUSE_SECONDS)
+            continue
+        for w in results:
+            doi = (w.get("doi") or "").replace("https://doi.org/", "").lower()
+            auths = w.get("authorships") or []
+            if not (doi and auths):
+                continue
+            last = auths[-1]
+            out[doi] = {
+                "name": (last.get("author") or {}).get("display_name") or "",
+                "affiliations": [
+                    i.get("display_name") for i in last.get("institutions", [])
+                    if i.get("display_name")
+                ],
+            }
+        time.sleep(BATCH_PAUSE_SECONDS)
+    return out
 
 
 def backfill_affiliations(archive_path: str, api_key: str | None = None,
@@ -180,15 +252,7 @@ def backfill_affiliations(archive_path: str, api_key: str | None = None,
 
     # Crossref fallback for whatever still lacks an affiliation — it is the
     # primary source for affiliations; SS rarely carries them.
-    trusted = {}
-    still_missing = []
-    for papers in archive.values():
-        for p in papers:
-            if p.get("team"):
-                trusted.setdefault(normalize_name(p["team"]), p["team"])
-            if not p.get("affiliation") and p.get("doi"):
-                still_missing.append(p)
-
+    trusted, still_missing = _scan_archive(archive)
     crossref_affiliations = crossref_teams = 0
     if still_missing:
         status_cb(f"Crossref: checking {len(still_missing)} remaining DOIs...")
@@ -198,14 +262,28 @@ def backfill_affiliations(archive_path: str, api_key: str | None = None,
             author = _crossref_last_author(p["doi"])
             if not author:
                 continue
-            if not p.get("team") and author["name"]:
-                p["team"] = trusted.get(normalize_name(author["name"]), author["name"])
-                crossref_teams += 1
-            if not p.get("affiliation") and author["affiliations"]:
-                p["affiliation"] = format_affiliations(author["affiliations"])
-                crossref_affiliations += 1
+            t, a = _apply_last_author(p, author, trusted)
+            crossref_teams += t
+            crossref_affiliations += a
         status_cb(
             f"Crossref: filled {crossref_affiliations} affiliations, {crossref_teams} teams"
+        )
+
+    # OpenAlex fallback — curated institutions covering many works Crossref lacks.
+    trusted, still_missing = _scan_archive(archive)
+    openalex_affiliations = openalex_teams = 0
+    if still_missing:
+        status_cb(f"OpenAlex: checking {len(still_missing)} remaining DOIs...")
+        lookup = _openalex_last_authors([p["doi"] for p in still_missing])
+        for p in still_missing:
+            author = lookup.get(p["doi"].lower())
+            if not author:
+                continue
+            t, a = _apply_last_author(p, author, trusted)
+            openalex_teams += t
+            openalex_affiliations += a
+        status_cb(
+            f"OpenAlex: filled {openalex_affiliations} affiliations, {openalex_teams} teams"
         )
 
     if not no_backup:
@@ -219,8 +297,8 @@ def backfill_affiliations(archive_path: str, api_key: str | None = None,
 
     return {
         "candidates": len(candidates),
-        "filled_affiliations": filled_affiliations + crossref_affiliations,
-        "filled_teams": filled_teams + crossref_teams,
+        "filled_affiliations": filled_affiliations + crossref_affiliations + openalex_affiliations,
+        "filled_teams": filled_teams + crossref_teams + openalex_teams,
         "reused_trusted": reused_trusted,
         "papers_missing": papers_missing,
         "authors_missing": authors_missing,
