@@ -18,11 +18,28 @@ from .data_fields import format_affiliations, normalize_name
 PAPERS_PER_BATCH = 500
 AUTHORS_PER_BATCH = 1000
 BATCH_PAUSE_SECONDS = 1.0
+EMPTY_BATCH_RETRIES = 3
+RETRY_PAUSE_SECONDS = 5.0
 
 
 def _chunk(items, size):
     for i in range(0, len(items), size):
         yield items[i:i + size]
+
+
+def _fetch_batch(fn, chunk, fields):
+    """Call a batch endpoint, retrying all-empty responses.
+
+    Semantic Scholar occasionally returns HTTP 200 with every ID null; a
+    fully-empty batch of real IDs is an anomaly worth retrying, not a result.
+    """
+    for attempt in range(EMPTY_BATCH_RETRIES):
+        results = _call_sch(fn, chunk, fields=fields)
+        if results:
+            return list(results)
+        if attempt < EMPTY_BATCH_RETRIES - 1:
+            time.sleep(RETRY_PAUSE_SECONDS * (attempt + 1))
+    return []
 
 
 def _call_sch(fn, *args, **kwargs):
@@ -92,7 +109,7 @@ def backfill_affiliations(archive_path: str, api_key: str | None = None,
     for n, chunk in enumerate(_chunk(doi_list, PAPERS_PER_BATCH)):
         if n:
             time.sleep(BATCH_PAUSE_SECONDS)
-        for paper in _call_sch(sch.get_papers, chunk, fields=["authors"]):
+        for paper in _fetch_batch(sch.get_papers, chunk, ["authors"]):
             doi = paper.externalIds.get("DOI") if paper.externalIds else None
             if doi:
                 fetched[doi] = paper
@@ -114,7 +131,7 @@ def backfill_affiliations(archive_path: str, api_key: str | None = None,
     for n, chunk in enumerate(_chunk(author_ids, AUTHORS_PER_BATCH)):
         if n:
             time.sleep(BATCH_PAUSE_SECONDS)
-        for author in _call_sch(sch.get_authors, chunk, fields=["name", "affiliations"]):
+        for author in _fetch_batch(sch.get_authors, chunk, ["name", "affiliations"]):
             details[author.authorId] = author
 
     filled_affiliations = filled_teams = reused_trusted = 0
