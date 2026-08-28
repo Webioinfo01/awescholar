@@ -1,8 +1,9 @@
-"""Tests for backfill.py — affiliation/team backfill from Semantic Scholar."""
+"""Tests for backfill.py — affiliation/team backfill from the web."""
 
 import json
 import os
 import tempfile
+from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
 from awescholar.backfill import backfill_affiliations
@@ -37,8 +38,12 @@ class FakePaper:
         self.authors = authors
 
 
-def _patch_scholar(papers, author_details):
-    """Patch SemanticScholar in backfill with a client serving the fixtures."""
+def _patch_scholar(papers, author_details, crossref=None):
+    """Patch SemanticScholar and the Crossref fetcher in backfill.
+
+    crossref maps doi -> {"name": str, "affiliations": [str]} | None.
+    """
+
     client = MagicMock()
 
     def get_papers(ids, fields=None, **kwargs):
@@ -50,7 +55,17 @@ def _patch_scholar(papers, author_details):
 
     client.get_papers.side_effect = get_papers
     client.get_authors.side_effect = get_authors
-    return patch("awescholar.backfill.SemanticScholar", return_value=client)
+
+    @contextmanager
+    def combined():
+        with (
+            patch("awescholar.backfill.SemanticScholar", return_value=client),
+            patch("awescholar.backfill._crossref_last_author",
+                  side_effect=lambda doi: crossref.get(doi) if crossref else None),
+        ):
+            yield
+
+    return combined()
 
 
 def test_backfill_fills_empty_affiliation_and_team():
@@ -201,3 +216,47 @@ def test_backfill_creates_backup_by_default():
 
         backups = [f for f in os.listdir(tmp) if f.startswith("data.json.") and f.endswith(".bak")]
         assert len(backups) == 1
+
+
+def test_backfill_crossref_fills_when_ss_has_no_affiliation():
+    """SS returns the author without affiliations; Crossref supplies them,
+    and the curated team name is reused for the matching last author."""
+    with tempfile.TemporaryDirectory() as tmp:
+        archive = os.path.join(tmp, "data.json")
+        _write_archive(archive, {
+            "AI Agents": [
+                {"doi": "10.1/known", "title": "Known", "team": "Qi Liu",
+                 "affiliation": "Princeton University"},
+                {"doi": "10.1/new", "title": "New", "team": "", "affiliation": ""},
+            ]
+        })
+        papers = [FakePaper("10.1/new", [FakeAuthorRef("A9", "Liu Qi")])]
+        details = {"A9": FakeAuthorDetail("A9", "Qi Liu", [])}  # SS: no affiliation data
+        crossref = {"10.1/new": {"name": "QI LIU", "affiliations": ["Broad Institute"]}}
+        with _patch_scholar(papers, details, crossref):
+            stats = backfill_affiliations(archive, no_backup=True)
+
+        entry = _read_archive(archive)["AI Agents"][1]
+        assert entry["team"] == "Qi Liu"          # curated form reused from the other entry
+        assert entry["affiliation"] == "Broad Institute"
+        assert stats["filled_affiliations"] == 1
+
+
+def test_backfill_crossref_unknown_doi_is_skipped_quietly():
+    """arXiv DOIs (DataCite) are unknown to Crossref — treated as missing, not error."""
+    with tempfile.TemporaryDirectory() as tmp:
+        archive = os.path.join(tmp, "data.json")
+        _write_archive(archive, {
+            "AI Agents": [{"doi": "10.48550/arXiv.2501.1", "title": "Preprint",
+                           "team": "", "affiliation": ""}]
+        })
+        papers = [FakePaper("10.48550/arXiv.2501.1", [FakeAuthorRef("X1", "Anon")])]
+        details = {"X1": FakeAuthorDetail("X1", "Anon", [])}
+        crossref = {"10.48550/arXiv.2501.1": None}
+        with _patch_scholar(papers, details, crossref):
+            stats = backfill_affiliations(archive, no_backup=True)
+
+        entry = _read_archive(archive)["AI Agents"][0]
+        assert entry["affiliation"] == ""          # stays empty, no crash
+        assert entry["team"] == "Anon"             # team still came from SS
+        assert stats["filled_affiliations"] == 0

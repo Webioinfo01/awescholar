@@ -1,14 +1,20 @@
-"""Backfill missing affiliation/team fields in an archive from Semantic Scholar.
+"""Backfill missing affiliation/team fields in an archive from the web.
 
-Fetches each DOI-paper's authors in batch, resolves which author represents
-the entry's team (last author by convention, or the author the archive
-already recorded), and fills only empty fields — existing values are never
-overwritten, and entries never move between categories.
+Two sources are consulted, cheapest-per-coverage first:
+1. Semantic Scholar — batch endpoints (papers, then authors); covers names
+   and teams well, affiliations poorly.
+2. Crossref — per-DOI work metadata; the primary source for author
+   affiliations (publisher-deposited).
+
+Only empty fields are filled, entries never move between categories, and
+the affiliation always comes from the same author as the team, so the
+pair can never mismatch.
 """
 
 import json
 import shutil
 import time
+import urllib.request
 from datetime import datetime
 
 from semanticscholar import SemanticScholar
@@ -18,6 +24,9 @@ from .data_fields import format_affiliations, normalize_name
 PAPERS_PER_BATCH = 500
 AUTHORS_PER_BATCH = 1000
 BATCH_PAUSE_SECONDS = 1.0
+CROSSREF_PAUSE_SECONDS = 0.4
+CROSSREF_TIMEOUT_SECONDS = 15
+CROSSREF_URL = "https://api.crossref.org/works/{doi}"
 
 
 def _chunk(items, size):
@@ -58,6 +67,32 @@ def _plan_team(authors, entry, trusted):
         if name:
             return a, name
     return authors[-1], None
+
+
+def _crossref_last_author(doi: str) -> dict | None:
+    """Fetch a work from Crossref and return its last author entry.
+
+    Returns {"name": str, "affiliations": [str]} or None when the DOI is
+    unknown to Crossref (e.g. DataCite-registered arXiv DOIs) or the request
+    fails — a missing record is a normal outcome, not an error.
+    """
+    req = urllib.request.Request(
+        CROSSREF_URL.format(doi=doi),
+        headers={"User-Agent": "awescholar-backfill (https://github.com/Webioinfo01/awescholar)"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=CROSSREF_TIMEOUT_SECONDS) as resp:
+            authors = json.load(resp)["message"].get("author") or []
+    except Exception:  # noqa: BLE001 — unknown DOIs and transient failures are normal outcomes
+        return None
+    if not authors:
+        return None
+    last = authors[-1]
+    name = " ".join(x for x in (last.get("given"), last.get("family")) if x)
+    return {
+        "name": name.strip(),
+        "affiliations": [a.get("name") for a in last.get("affiliation", []) if a.get("name")],
+    }
 
 
 def backfill_affiliations(archive_path: str, api_key: str | None = None,
@@ -138,10 +173,40 @@ def backfill_affiliations(archive_path: str, api_key: str | None = None,
 
     authors_missing = len(plans) - len(details)
     status_cb(
-        f"Filled {filled_affiliations} affiliations, {filled_teams} teams "
-        f"({reused_trusted} reused from existing archive entries); "
+        f"Semantic Scholar: filled {filled_affiliations} affiliations, "
+        f"{filled_teams} teams ({reused_trusted} reused from existing entries); "
         f"{papers_missing} papers not found, {authors_missing} authors without data"
     )
+
+    # Crossref fallback for whatever still lacks an affiliation — it is the
+    # primary source for affiliations; SS rarely carries them.
+    trusted = {}
+    still_missing = []
+    for papers in archive.values():
+        for p in papers:
+            if p.get("team"):
+                trusted.setdefault(normalize_name(p["team"]), p["team"])
+            if not p.get("affiliation") and p.get("doi"):
+                still_missing.append(p)
+
+    crossref_affiliations = crossref_teams = 0
+    if still_missing:
+        status_cb(f"Crossref: checking {len(still_missing)} remaining DOIs...")
+        for k, p in enumerate(still_missing):
+            if k:
+                time.sleep(CROSSREF_PAUSE_SECONDS)
+            author = _crossref_last_author(p["doi"])
+            if not author:
+                continue
+            if not p.get("team") and author["name"]:
+                p["team"] = trusted.get(normalize_name(author["name"]), author["name"])
+                crossref_teams += 1
+            if not p.get("affiliation") and author["affiliations"]:
+                p["affiliation"] = format_affiliations(author["affiliations"])
+                crossref_affiliations += 1
+        status_cb(
+            f"Crossref: filled {crossref_affiliations} affiliations, {crossref_teams} teams"
+        )
 
     if not no_backup:
         ts = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
@@ -154,8 +219,8 @@ def backfill_affiliations(archive_path: str, api_key: str | None = None,
 
     return {
         "candidates": len(candidates),
-        "filled_affiliations": filled_affiliations,
-        "filled_teams": filled_teams,
+        "filled_affiliations": filled_affiliations + crossref_affiliations,
+        "filled_teams": filled_teams + crossref_teams,
         "reused_trusted": reused_trusted,
         "papers_missing": papers_missing,
         "authors_missing": authors_missing,
