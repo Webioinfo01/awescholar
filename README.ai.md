@@ -12,7 +12,7 @@ This document is for AI coding agents. First install the `awescholar` CLI, then 
 
 ### Prerequisites
 
-- Python >= 3.10 (`python3 --version`)
+- Python >= 3.11 (`python3 --version`)
 - pip available (`pip --version`)
 
 If Python is missing, tell the user to install it from https://www.python.org/.

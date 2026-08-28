@@ -10,7 +10,7 @@
   </p>
   <p>
     <img src="https://img.shields.io/badge/version-0.1.8-7C3AED?style=flat-square" alt="Version">
-    <img src="https://img.shields.io/badge/python-%E2%89%A53.10-0EA5E9?style=flat-square" alt="Python">
+    <img src="https://img.shields.io/badge/python-%E2%89%A53.11-0EA5E9?style=flat-square" alt="Python">
   </p>
   <p>
     <img src="https://img.shields.io/badge/status-alpha-c96a3d?style=flat-square" alt="Status">

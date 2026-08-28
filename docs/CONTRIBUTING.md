@@ -9,7 +9,7 @@ pip install -e ".[dev]"
 pytest
 ```
 
-Requires Python >= 3.10.
+Requires Python >= 3.11.
 
 ## Project Structure
 
