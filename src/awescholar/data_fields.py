@@ -63,6 +63,16 @@ def first_present(data: dict, *keys: str, default: str = ""):
     return default
 
 
+def normalize_name(name) -> str:
+    """Normalize a person name for matching (case/period/whitespace-insensitive)."""
+    return " ".join(str(name or "").replace(".", " ").split()).casefold()
+
+
+def format_affiliations(affiliations) -> str:
+    """Join an affiliation list for display; single source of truth for the separator."""
+    return ", ".join(a for a in (affiliations or []) if a)
+
+
 def _extract_team_name(authors: str) -> str:
     """Extract author name from the stored authors string.
 
@@ -89,8 +99,7 @@ def _extract_affiliation(authors: str) -> str:
         try:
             parsed = ast.literal_eval(authors)
             if isinstance(parsed, dict):
-                affiliations = parsed.get("affiliations") or []
-                return ", ".join(a for a in affiliations if a)
+                return format_affiliations(parsed.get("affiliations") or [])
         except (ValueError, SyntaxError):
             return ""
     return ""

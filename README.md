@@ -201,6 +201,7 @@ awescholar updater search --json-file papers.json --by title   # Search, save fo
 awescholar updater search --archive data.json --by title       # Search and add directly
 awescholar updater search --archive data.json --category "AI Agents"  # Add to a specific category
 awescholar updater add --archive data.json            # Interactively add a record to project data JSON
+awescholar updater backfill --archive data.json       # Fill missing affiliation/team fields from Semantic Scholar
 ```
 
 Each subcommand accepts `--input` (or positional `input` for report) to read from a specific file instead of the default path. This lets you re-run any step independently without re-running the full pipeline.

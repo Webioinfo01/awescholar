@@ -226,6 +226,15 @@ def cmd_search_record(args: argparse.Namespace, config: dict) -> int | None:
     )
 
 
+def cmd_backfill(args: argparse.Namespace, config: dict) -> int | None:
+    from .backfill import backfill_affiliations
+
+    backfill_affiliations(
+        archive_path=args.archive, api_key=config["ss_api_key"],
+        no_backup=args.no_backup,
+    )
+
+
 def cmd_add(args: argparse.Namespace, config: dict) -> int | None:
     from .record import add_interactive
 
@@ -303,6 +312,10 @@ def main() -> int:
     p = updater_sub.add_parser("add", help="Interactively add a single record to project data JSON")
     p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")
 
+    p = updater_sub.add_parser("backfill", help="Fill missing affiliation/team fields from Semantic Scholar")
+    p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")
+    p.add_argument("--no-backup", action="store_true", help="Do not create a backup of the archive before updating")
+
     args = parser.parse_args()
     if not args.command:
         parser.print_help()
@@ -330,7 +343,7 @@ def main() -> int:
             return 0
         handlers = {
             "update": cmd_update, "readme": cmd_readme, "rss": cmd_rss,
-            "search": cmd_search_record, "add": cmd_add,
+            "search": cmd_search_record, "add": cmd_add, "backfill": cmd_backfill,
         }
         return handlers[args.updater_command](args, config) or 0
 
