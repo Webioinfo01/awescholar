@@ -1,6 +1,6 @@
 """Tests for schemas.py — project schema contracts."""
 
-from awescholar.schemas import PaperAnnotation, AnnotationResult, FilteredPaper, FilterResult
+from awescholar.schemas import AnnotationResult, FilteredPaper, FilterResult, PaperAnnotation
 
 
 def test_annotation_result_contract():

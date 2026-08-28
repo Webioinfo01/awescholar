@@ -14,12 +14,12 @@ from .readme import (
 from .rss import generate_rss
 
 __all__ = [
-    "DateEncoder",
-    "merge_new_to_archive",
-    "merge_archive_to_new",
-    "discover_readme_targets",
-    "update_readme",
-    "generate_rss",
-    "README_START_MARKER",
     "README_END_MARKER",
+    "README_START_MARKER",
+    "DateEncoder",
+    "discover_readme_targets",
+    "generate_rss",
+    "merge_archive_to_new",
+    "merge_new_to_archive",
+    "update_readme",
 ]

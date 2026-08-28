@@ -4,7 +4,7 @@ import html
 import json
 import os
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 
 def _year_to_rfc822(year_str: str) -> str:
@@ -13,7 +13,8 @@ def _year_to_rfc822(year_str: str) -> str:
         return ""
     normalized = year_str.replace(".", "-")
     try:
-        dt = datetime.strptime(normalized[:7], "%Y-%m")
+        # Synthesized first-of-month date; pinned to UTC so the RFC 822 "GMT" label is honest
+        dt = datetime.strptime(normalized[:7], "%Y-%m").replace(tzinfo=UTC)
         return dt.strftime("%a, %d %b %Y 00:00:00 GMT")
     except (ValueError, IndexError):
         return year_str
@@ -63,7 +64,7 @@ def generate_rss(
         archive = json.load(f)
 
     items = []
-    for category, papers in archive.items():
+    for papers in archive.values():
         for p in papers:
             ptitle = p.get("title", "Untitled")
             team = p.get("team", "")
@@ -102,7 +103,7 @@ def generate_rss(
     <guid isPermaLink="false">{guid}</guid>
   </item>""")
 
-    now = datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
+    now = datetime.now(UTC).strftime("%a, %d %b %Y %H:%M:%S GMT")
     atom_link = f'\n  <atom:link href="{html.escape(rss_url)}" rel="self" type="application/rss+xml" />' if rss_url else ""
 
     rss = f"""<?xml version="1.0" encoding="UTF-8" ?>

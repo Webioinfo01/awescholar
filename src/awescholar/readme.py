@@ -281,12 +281,12 @@ def update_readme(
         content = "\n".join(parts)
 
     if not no_backup and os.path.exists(readme_path):
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        ts = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
         backup_path = f"{readme_path}.{ts}.bak"
         try:
             shutil.copy2(readme_path, backup_path)
             print(f"Created backup: {backup_path}")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — backup failure must not abort the README update
             print(f"Warning: Could not create backup of {readme_path}: {e}")
 
     with open(readme_path, "w", encoding="utf-8") as f:

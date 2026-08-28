@@ -3,7 +3,7 @@
 import html
 import json
 import os
-from typing import Callable
+from collections.abc import Callable
 
 from . import prompts
 from .archive import DateEncoder
@@ -79,7 +79,9 @@ def run_annotate(
             if attempt == max_retries - 1:
                 raise
     if not isinstance(result, AnnotationResult):
-        raise RuntimeError(f"Annotator LLM returned invalid response after {max_retries} attempts.")
+        raise RuntimeError(  # noqa: TRY004 — invalid LLM output, not a caller type error
+            f"Annotator LLM returned invalid response after {max_retries} attempts."
+        )
 
     paper_map = {p["doi"]: p for p in papers}
     structured: dict[str, list[dict]] = {}
@@ -132,7 +134,7 @@ def run_filter(
         response_format=FilterResult, api_key=api_key, base_url=base_url,
     )
     if isinstance(result, str):
-        raise RuntimeError(f"Filter LLM returned invalid response. Raw: {result[:200]}")
+        raise RuntimeError(f"Filter LLM returned invalid response. Raw: {result[:200]}")  # noqa: TRY004
 
     # Collect DOIs in LLM's ranked order, then hard-truncate to limit
     ordered_dois: list[str] = []

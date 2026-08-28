@@ -2,8 +2,8 @@
 
 import json
 import os
-from semanticscholar import SemanticScholar
 
+from semanticscholar import SemanticScholar
 
 FIELDS = [
     "year", "title", "team", "team website", "affiliation",
@@ -72,7 +72,7 @@ def search_by_title(title: str, sch: SemanticScholar) -> dict | None:
                     "publicationDate", "authors", "externalIds", "url", "journal"],
         )
         return _paper_to_record(paper)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — one failed lookup must not abort the batch
         print(f"  Error: {e}")
         return None
 
@@ -87,7 +87,7 @@ def search_by_doi(doi: str, sch: SemanticScholar) -> dict | None:
                     "publicationDate", "authors", "externalIds", "url", "journal"],
         )
         return _paper_to_record(paper)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — one failed lookup must not abort the batch
         print(f"  Error: {e}")
         return None
 
@@ -275,7 +275,7 @@ def add_interactive(archive_path: str, categories: list[str] | None = None) -> N
                 path = code_url.split("github.com/")[1].strip("/")
                 owner_repo = "/".join(path.split("/")[:2])
                 parts[9] = f"https://img.shields.io/github/stars/{owner_repo}"
-            except Exception:
+            except Exception:  # noqa: BLE001, S110 — badge is best-effort decoration
                 pass
         break
 

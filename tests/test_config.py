@@ -1,6 +1,7 @@
 """Tests for CLI config loading."""
 
 import json
+
 try:
     import tomllib
 except ModuleNotFoundError:

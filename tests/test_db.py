@@ -2,6 +2,8 @@
 
 import tempfile
 
+from sqlalchemy.exc import IntegrityError
+
 from awescholar.db import Paper, get_session
 
 
@@ -42,6 +44,6 @@ def test_doi_uniqueness():
         try:
             session.commit()
             assert False, "Should have raised integrity error"
-        except Exception:
+        except IntegrityError:
             session.rollback()
         session.close()

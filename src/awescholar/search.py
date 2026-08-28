@@ -4,6 +4,7 @@ import json
 import sys
 
 from semanticscholar import SemanticScholar
+
 from .db import Paper, get_session
 
 
@@ -77,7 +78,7 @@ def search_papers(
         try:
             authors_data = sch.get_authors(author_ids, fields=["name", "affiliations"])
             author_map = {a.authorId: a for a in authors_data}
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — author details are optional enrichment
             print(f"Warning: could not fetch author details: {e}", file=sys.stderr)
 
     session = get_session(db_path)

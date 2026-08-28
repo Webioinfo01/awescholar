@@ -5,9 +5,9 @@ import json
 import os
 import re
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from awescholar.utils import merge_new_to_archive, merge_archive_to_new, update_readme, generate_rss
+from awescholar.utils import generate_rss, merge_archive_to_new, merge_new_to_archive, update_readme
 
 
 def _write_json(path: str, data: dict) -> None:
@@ -190,7 +190,8 @@ def test_update_readme_creates_file():
         update_readme(archive, readme, project_title="Test Awesome")
 
         assert os.path.exists(readme)
-        content = open(readme).read()
+        with open(readme) as f:
+            content = f.read()
         assert "# Test Awesome" in content
         assert "<!-- AWESCHOLAR:START -->" in content
         assert "## Table of Contents" in content
@@ -217,7 +218,8 @@ def test_update_readme_creates_backup_by_default():
         # Should have exactly one .bak file
         bak_files = [f for f in os.listdir(tmp) if f.startswith("readme.md.") and f.endswith(".bak")]
         assert len(bak_files) == 1
-        backup_content = open(os.path.join(tmp, bak_files[0]), encoding="utf-8").read()
+        with open(os.path.join(tmp, bak_files[0]), encoding="utf-8") as f:
+            backup_content = f.read()
         assert backup_content == (
             "# Old Content\n"
             "<!-- AWESCHOLAR:START -->\n"
@@ -279,7 +281,9 @@ def test_update_readme_replaces_only_marker_region():
 
         update_readme(archive, readme, no_backup=True)
 
-        content = open(readme, encoding="utf-8").read()
+        with open(readme, encoding="utf-8") as f:
+
+            content = f.read()
         assert "# Manual Title" in content
         assert "- [Manual](#manual)" in content
         assert "## Citation\nKeep this." in content
@@ -310,7 +314,9 @@ def test_update_readme_adds_new_categories_to_toc_outside_markers():
 
         update_readme(archive, readme, no_backup=True)
 
-        content = open(readme, encoding="utf-8").read()
+        with open(readme, encoding="utf-8") as f:
+
+            content = f.read()
         # TOC is outside markers — new categories appended there
         before_marker = content.split("<!-- AWESCHOLAR:START -->", 1)[0]
         assert "- [Old](#old)" in before_marker
@@ -337,7 +343,9 @@ def test_update_readme_toc_does_not_duplicate_case_equivalent_categories():
 
         update_readme(archive, readme, project_title="Custom Title", no_backup=True)
 
-        content = open(readme, encoding="utf-8").read()
+        with open(readme, encoding="utf-8") as f:
+
+            content = f.read()
         assert content.startswith("# Custom Title")
         assert content.count("- [ai-agents](#ai-agents)") == 1
         assert "- [AI Agents](#ai-agents)" not in content
@@ -369,7 +377,9 @@ def test_update_readme_renders_project_data_link_fields_without_clearing_code_pr
 
         update_readme(archive, readme, no_backup=True)
 
-        content = open(readme, encoding="utf-8").read()
+        with open(readme, encoding="utf-8") as f:
+
+            content = f.read()
         assert "[Link](https://github.com/snap-stanford)" in content
         assert "[Link](https://www.biorxiv.org/content/10.1101/2025.05.30.656746v1)" in content
         assert "[Link](https://biomni.stanford.edu/)" in content
@@ -404,7 +414,8 @@ def test_generate_rss_creates_file():
         generate_rss(archive, rss, title="Test Feed")
 
         assert os.path.exists(rss)
-        content = open(rss).read()
+        with open(rss) as f:
+            content = f.read()
         assert "<rss" in content
         assert "Paper" in content
         assert "Test Feed" in content
@@ -424,7 +435,9 @@ def test_update_readme_sorts_unpadded_months_correctly():
 
         update_readme(archive, readme)
 
-        content = open(readme, encoding="utf-8").read()
+        with open(readme, encoding="utf-8") as f:
+
+            content = f.read()
         march_pos = content.index("March Paper")
         december_pos = content.index("December Paper")
         padded_pos = content.index("Padded March Paper")
@@ -440,8 +453,10 @@ def test_generate_rss_lastbuilddate_is_utc():
 
         generate_rss(archive, rss, title="Test Feed")
 
-        content = open(rss, encoding="utf-8").read()
+        with open(rss, encoding="utf-8") as f:
+
+            content = f.read()
         m = re.search(r"<lastBuildDate>(.*?)</lastBuildDate>", content)
         assert m, "lastBuildDate missing from RSS output"
         parsed = email.utils.parsedate_to_datetime(m.group(1))
-        assert abs((parsed - datetime.now(timezone.utc)).total_seconds()) < 120
+        assert abs((parsed - datetime.now(UTC)).total_seconds()) < 120

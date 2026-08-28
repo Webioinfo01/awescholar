@@ -3,17 +3,16 @@
 import json
 import os
 import tempfile
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from awescholar.record import (
-    search_and_add,
+    _is_duplicate,
     _load_flat_json,
     _save_flat_json,
-    _is_duplicate,
+    search_and_add,
 )
-
 
 # ── _load_flat_json / _save_flat_json ──────────────────────────
 

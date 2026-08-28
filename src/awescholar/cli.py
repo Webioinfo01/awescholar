@@ -9,6 +9,7 @@ from . import __version__
 from .archive import DateEncoder
 from .config import load_config, resolve_agent_config
 
+
 def get_version() -> str:
     return __version__
 
@@ -131,7 +132,7 @@ def cmd_run(args: argparse.Namespace, config: dict) -> int | None:
         print("Error: query is required (via CLI arg or config search.query)")
         return 1
 
-    filtered, report = run_pipeline(
+    _, report = run_pipeline(
         query=query, model=config["model"], db_path=config["db_path"],
         api_key=config["api_key"], ss_api_key=config["ss_api_key"], base_url=config["base_url"],
         agent_models=config.get("agent_models"),
