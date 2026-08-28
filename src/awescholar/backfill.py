@@ -13,6 +13,7 @@ pair can never mismatch.
 """
 
 import json
+import re
 import shutil
 import time
 import urllib.parse
@@ -33,6 +34,31 @@ OPENALEX_PER_BATCH = 50
 OPENALEX_TIMEOUT_SECONDS = 20
 OPENALEX_URL = "https://api.openalex.org/works"
 OPENALEX_UA = "awescholar-backfill (https://github.com/Webioinfo01/awescholar)"
+AFFILIATION_MAX_CHARS = 200
+
+_INSTITUTION_HINTS = (
+    "university", "institute", "hospital", "college", "school", "laboratory",
+    "centre", "center", "academy", "foundation", "corporation", "company",
+    "clinic", "polytechnic",
+)
+
+
+def _clean_affiliation(text: str) -> str:
+    """Shorten publisher affiliation blobs to institutional segments.
+
+    Some Crossref deposits run department + address + author initials (or
+    outright biographies) into one affiliation string, hundreds of chars
+    long. Values within normal length are returned untouched; longer ones
+    keep only segments that name an institution.
+    """
+    if len(text) <= AFFILIATION_MAX_CHARS:
+        return text
+    text = re.sub(r"\([^)]*\)", " ", text)
+    segments = [s.strip(" ,;-") for s in re.split(r"[;,]", text) if s.strip(" ,;-")]
+    hits = [s for s in segments
+            if 8 < len(s) < 90 and any(h in s.lower() for h in _INSTITUTION_HINTS)]
+    picked = hits[:2] if hits else segments[:2]
+    return ", ".join(dict.fromkeys(picked))[:160]
 
 
 def _chunk(items, size):
@@ -99,7 +125,7 @@ def _apply_last_author(entry: dict, author: dict, trusted: dict) -> tuple[bool, 
         entry["team"] = trusted.get(normalize_name(author["name"]), author["name"])
         filled_team = True
     if not entry.get("affiliation") and author.get("affiliations"):
-        entry["affiliation"] = format_affiliations(author["affiliations"])
+        entry["affiliation"] = _clean_affiliation(format_affiliations(author["affiliations"]))
         filled_affiliation = True
     return filled_team, filled_affiliation
 
@@ -240,7 +266,7 @@ def backfill_affiliations(archive_path: str, api_key: str | None = None,
         if not entry.get("affiliation"):
             affiliations = list(author.affiliations or []) if author else []
             if affiliations:
-                entry["affiliation"] = format_affiliations(affiliations)
+                entry["affiliation"] = _clean_affiliation(format_affiliations(affiliations))
                 filled_affiliations += 1
 
     authors_missing = len(plans) - len(details)

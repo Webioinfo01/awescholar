@@ -291,3 +291,33 @@ def test_backfill_openalex_covers_what_crossref_lacks():
         assert entry["team"] == "Qi Liu"              # curated form reused (via crossref pass)
         assert entry["affiliation"] == "Broad Institute"
         assert stats["filled_affiliations"] == 1
+
+
+def test_backfill_shortens_pathological_affiliation_blobs():
+    """A publisher blob (department + address + initials, 700+ chars) is cut
+    down to the institutional segments; normal values pass through as-is."""
+    blob = ("Department of Cardiology, The First Affiliated Hospital of Bengbu "
+            "Medical University, Bengbu, Anhui, P.R. China (Y.W., J.X., L.C.), "
+            "Department of Cardiology, The First Affiliated Hospital of Bengbu "
+            "Medical University, Bengbu, Anhui, P.R. China")
+    assert len(blob) > 200
+    with tempfile.TemporaryDirectory() as tmp:
+        archive = os.path.join(tmp, "data.json")
+        _write_archive(archive, {
+            "AI Agents": [
+                {"doi": "10.1/blob", "title": "Blob Paper", "team": "", "affiliation": ""},
+                {"doi": "10.1/ok", "title": "Clean Paper", "team": "", "affiliation": ""},
+            ]
+        })
+        crossref = {
+            "10.1/blob": {"name": "Author One", "affiliations": [blob]},
+            "10.1/ok": {"name": "Author Two", "affiliations": ["Imperial College London"]},
+        }
+        with _patch_scholar([], {}, crossref):
+            backfill_affiliations(archive, no_backup=True)
+
+        entries = _read_archive(archive)["AI Agents"]
+        assert "Bengbu Medical University" in entries[0]["affiliation"]
+        assert len(entries[0]["affiliation"]) <= 160
+        assert "P.R. China" not in entries[0]["affiliation"]
+        assert entries[1]["affiliation"] == "Imperial College London"  # untouched
