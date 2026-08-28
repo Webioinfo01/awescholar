@@ -4,17 +4,16 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "awescholar"
-version = "0.1.8"
+version = "0.1.9"
 description = "Automated scientific literature discovery and curation for Awesome lists"
 requires-python = ">=3.11"
 license = "MPL-2.0"
 dependencies = [
-    "litellm",
-    "semanticscholar",
-    "sqlalchemy",
+    "litellm>=1.86",
+    "semanticscholar>=0.12",
+    "sqlalchemy>=2.0",
     "pydantic>=2.0",
-    "python-dotenv",
-    "rich",
+    "python-dotenv>=1.0",
 ]
 
 [project.optional-dependencies]
