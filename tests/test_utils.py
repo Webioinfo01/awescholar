@@ -1,8 +1,11 @@
 """Tests for utils.py — merge, readme, rss."""
 
+import email.utils
 import json
 import os
+import re
 import tempfile
+from datetime import datetime, timezone
 
 from awescholar.utils import merge_new_to_archive, merge_archive_to_new, update_readme, generate_rss
 
@@ -405,3 +408,40 @@ def test_generate_rss_creates_file():
         assert "<rss" in content
         assert "Paper" in content
         assert "Test Feed" in content
+
+
+def test_update_readme_sorts_unpadded_months_correctly():
+    with tempfile.TemporaryDirectory() as tmp:
+        archive = os.path.join(tmp, "archive.json")
+        readme = os.path.join(tmp, "readme.md")
+        _write_json(archive, {
+            "Models": [
+                {"doi": "10.1/a", "title": "March Paper", "year": "2025.3"},
+                {"doi": "10.1/b", "title": "December Paper", "year": "2025.12"},
+                {"doi": "10.1/c", "title": "Padded March Paper", "year": "2025.03"},
+            ]
+        })
+
+        update_readme(archive, readme)
+
+        content = open(readme, encoding="utf-8").read()
+        march_pos = content.index("March Paper")
+        december_pos = content.index("December Paper")
+        padded_pos = content.index("Padded March Paper")
+        assert december_pos < march_pos
+        assert december_pos < padded_pos
+
+
+def test_generate_rss_lastbuilddate_is_utc():
+    with tempfile.TemporaryDirectory() as tmp:
+        archive = os.path.join(tmp, "archive.json")
+        rss = os.path.join(tmp, "rss.xml")
+        _write_json(archive, {"Cat": [{"doi": "10.1/a", "title": "Paper"}]})
+
+        generate_rss(archive, rss, title="Test Feed")
+
+        content = open(rss, encoding="utf-8").read()
+        m = re.search(r"<lastBuildDate>(.*?)</lastBuildDate>", content)
+        assert m, "lastBuildDate missing from RSS output"
+        parsed = email.utils.parsedate_to_datetime(m.group(1))
+        assert abs((parsed - datetime.now(timezone.utc)).total_seconds()) < 120

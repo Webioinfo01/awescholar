@@ -52,7 +52,8 @@ def cmd_annotate(args: argparse.Namespace, config: dict) -> int | None:
             print("No papers in database. Run 'awescholar crawler search <query>' first.")
             return 1
         papers = [
-            {"doi": p.doi, "title": p.title, "abstract": p.abstract, "venue": p.venue}
+            {"doi": p.doi, "title": p.title, "abstract": p.abstract, "venue": p.venue,
+             "authors": p.authors}
             for p in db_papers
         ]
 

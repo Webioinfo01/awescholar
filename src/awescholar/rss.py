@@ -4,7 +4,7 @@ import html
 import json
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 def _year_to_rfc822(year_str: str) -> str:
@@ -102,7 +102,7 @@ def generate_rss(
     <guid isPermaLink="false">{guid}</guid>
   </item>""")
 
-    now = datetime.now().strftime("%a, %d %b %Y %H:%M:%S GMT")
+    now = datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
     atom_link = f'\n  <atom:link href="{html.escape(rss_url)}" rel="self" type="application/rss+xml" />' if rss_url else ""
 
     rss = f"""<?xml version="1.0" encoding="UTF-8" ?>

@@ -1,5 +1,8 @@
 """Semantic Scholar paper search with database persistence."""
 
+import json
+import sys
+
 from semanticscholar import SemanticScholar
 from .db import Paper, get_session
 
@@ -73,9 +76,9 @@ def search_papers(
     if author_ids:
         try:
             authors_data = sch.get_authors(author_ids, fields=["name", "affiliations"])
-            author_map = {a["authorId"]: a for a in authors_data}
-        except Exception:
-            pass
+            author_map = {a.authorId: a for a in authors_data}
+        except Exception as e:
+            print(f"Warning: could not fetch author details: {e}", file=sys.stderr)
 
     session = get_session(db_path)
     saved = []
@@ -95,14 +98,16 @@ def search_papers(
                 continue
 
             last_author = paper.authors[-1]
-            author_info = author_map.get(last_author.authorId, {"name": last_author.name})
+            author_detail = author_map.get(last_author.authorId)
+            team_name = (author_detail.name if author_detail else None) or last_author.name or ""
+            affiliations = list(author_detail.affiliations or []) if author_detail else []
 
             db_paper = Paper(
                 paper_id=paper.paperId,
                 doi=doi,
                 title=paper.title,
                 abstract=getattr(paper, "abstract", None),
-                authors=str(author_info),
+                authors=json.dumps({"name": team_name, "affiliations": affiliations}),
                 year=getattr(paper, "year", None),
                 venue=getattr(paper, "venue", None),
                 journal=paper.journal.name if paper.journal else None,

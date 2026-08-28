@@ -3,7 +3,6 @@
 import glob
 import json
 import os
-import re
 import shutil
 from datetime import datetime
 
@@ -108,9 +107,9 @@ def _parse_existing_toc(content: str) -> list:
 
 
 def _split_sections(content: str) -> tuple:
-    """Split content into (toc_block, section_blocks, trailing).
+    """Split content into (toc_block, section_blocks).
 
-    Returns (toc_text, {normalized_name: section_text}, trailing_text_after_last_section).
+    Returns (toc_text, {normalized_name: section_text}).
     """
     lines = content.splitlines(keepends=True)
     toc_block = ""
@@ -169,10 +168,12 @@ def update_readme(
     archive = _canonical_archive_sections(archive)
 
     def _sort_year(p):
-        y = p.get("year") or ""
-        if isinstance(y, str):
-            return y
-        return str(y)
+        # Pad unpadded months ("2025.3") so string sort matches chronological order
+        y = str(p.get("year") or "")
+        parts = y.split(".")
+        if len(parts) == 2 and parts[1].isdigit():
+            return f"{parts[0]}.{parts[1].zfill(2)}"
+        return y
 
     def _make_table_rows(papers):
         """Generate only the table header + rows (no ## heading)."""
