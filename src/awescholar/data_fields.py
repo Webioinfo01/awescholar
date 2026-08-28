@@ -2,6 +2,11 @@
 
 import ast
 
+
+def normalize_title(title) -> str:
+    """Normalize a paper title for matching (case/whitespace-insensitive)."""
+    return " ".join(str(title or "").split()).casefold()
+
 PROJECT_PAPER_FIELDS = (
     "year",
     "title",

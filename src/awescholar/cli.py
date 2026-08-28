@@ -222,6 +222,7 @@ def cmd_search_record(args: argparse.Namespace, config: dict) -> int | None:
     search_and_add(
         archive_path=args.archive, by=args.by,
         api_key=config["ss_api_key"], json_file=args.json_file,
+        category=args.category,
     )
 
 
@@ -297,6 +298,7 @@ def main() -> int:
     p.add_argument("--archive", type=str, help="Path to project data JSON")
     p.add_argument("--json-file", type=str, help="Save to a flat JSON list for review (instead of archive)")
     p.add_argument("--by", choices=["title", "doi"], default="title", help="Search by title or DOI (default: title)")
+    p.add_argument("--category", type=str, help="Category for added papers (default: first category in archive)")
 
     p = updater_sub.add_parser("add", help="Interactively add a single record to project data JSON")
     p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")

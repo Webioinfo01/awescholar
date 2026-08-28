@@ -199,6 +199,7 @@ awescholar updater readme --archive data.json --no-backup  # Generate README wit
 awescholar updater rss --archive data.json            # Generate RSS feed
 awescholar updater search --json-file papers.json --by title   # Search, save for review
 awescholar updater search --archive data.json --by title       # Search and add directly
+awescholar updater search --archive data.json --category "AI Agents"  # Add to a specific category
 awescholar updater add --archive data.json            # Interactively add a record to project data JSON
 ```
 

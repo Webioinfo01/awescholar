@@ -5,6 +5,9 @@ import os
 
 from semanticscholar import SemanticScholar
 
+from .categories import canonicalize_category
+from .data_fields import normalize_title
+
 FIELDS = [
     "year", "title", "team", "team website", "affiliation",
     "domain", "venue", "paperUrl", "codeUrl", "githubStars",
@@ -127,10 +130,12 @@ def _save_flat_json(path: str, papers: list) -> None:
 
 
 def _is_duplicate(papers: list, record: dict) -> bool:
+    rec_title = normalize_title(record.get("title"))
+    rec_doi = record.get("doi")
     for existing in papers:
-        if existing.get("title") == record["title"]:
+        if rec_title and normalize_title(existing.get("title")) == rec_title:
             return True
-        if record.get("doi") and existing.get("doi") == record["doi"]:
+        if rec_doi and existing.get("doi") == rec_doi:
             return True
     return False
 
@@ -140,6 +145,7 @@ def search_and_add(
     by: str = "title",
     api_key: str | None = None,
     json_file: str | None = None,
+    category: str | None = None,
 ) -> None:
     """Search Semantic Scholar by title or DOI and add records to archive or json file."""
     target = json_file or archive_path
@@ -193,6 +199,14 @@ def search_and_add(
             archive = {"papers": archive}
 
         added = 0
+        # Add to the requested category (normalized to an existing spelling),
+        # falling back to the first category as before
+        if category:
+            target = canonicalize_category(category, archive.keys())
+        else:
+            categories = list(archive.keys())
+            target = categories[0] if categories else "papers"
+
         for i, query in enumerate(queries, 1):
             print(f"\n[{i}/{len(queries)}] Searching: {query}")
             record = search_by_title(query, sch) if by == "title" else search_by_doi(query, sch)
@@ -211,9 +225,6 @@ def search_and_add(
                 print(f"  Already exists: {record['title'][:60]}")
                 continue
 
-            # Add to first category or a default one
-            categories = list(archive.keys())
-            target = categories[0] if categories else "papers"
             if target not in archive:
                 archive[target] = []
             archive[target].append(record)

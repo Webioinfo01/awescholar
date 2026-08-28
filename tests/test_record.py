@@ -57,6 +57,7 @@ def test_load_flat_json_flattens_dict_format():
         ([{"title": "Paper A", "doi": "10.1/a"}], {"title": "Paper A", "doi": "10.1/other"}, True),
         ([{"title": "Different Title", "doi": "10.1/a"}], {"title": "Paper A", "doi": "10.1/a"}, True),
         ([{"title": "Paper A", "doi": "10.1/a"}], {"title": "Paper B", "doi": "10.1/b"}, False),
+        ([{"title": "paper a  with extra spaces", "doi": "10.1/x"}], {"title": "Paper A With Extra Spaces", "doi": "10.1/y"}, True),
     ],
 )
 def test_is_duplicate(existing, new, expected):
@@ -154,3 +155,46 @@ def test_search_and_add_json_file_empty_input(MockSS, mock_input):
         search_and_add(json_file=json_file, by="title")
 
         assert not os.path.exists(json_file)
+
+
+# ── search_and_add with archive ────────────────────────────────
+
+@patch("builtins.input", side_effect=["My Paper Title", ""])
+@patch("awescholar.record.SemanticScholar")
+def test_search_and_add_archive_with_category(MockSS, mock_input):
+    mock_client = MagicMock()
+    MockSS.return_value = mock_client
+    mock_client.search_paper.return_value = _mock_paper(title="My Paper Title", doi="10.1/mp")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        archive = os.path.join(tmp, "data.json")
+        with open(archive, "w") as f:
+            json.dump({"AI Agents": [], "Reviews": []}, f)
+
+        search_and_add(archive_path=archive, by="title", category="reviews")
+
+        with open(archive) as f:
+            data = json.load(f)
+        assert data["AI Agents"] == []
+        assert len(data["Reviews"]) == 1
+        assert data["Reviews"][0]["title"] == "My Paper Title"
+
+
+@patch("builtins.input", side_effect=["My Paper Title", ""])
+@patch("awescholar.record.SemanticScholar")
+def test_search_and_add_archive_defaults_to_first_category(MockSS, mock_input):
+    mock_client = MagicMock()
+    MockSS.return_value = mock_client
+    mock_client.search_paper.return_value = _mock_paper(title="My Paper Title", doi="10.1/mp")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        archive = os.path.join(tmp, "data.json")
+        with open(archive, "w") as f:
+            json.dump({"AI Agents": [], "Reviews": []}, f)
+
+        search_and_add(archive_path=archive, by="title")
+
+        with open(archive) as f:
+            data = json.load(f)
+        assert len(data["AI Agents"]) == 1
+        assert data["Reviews"] == []
