@@ -146,20 +146,26 @@ def search_and_add(
     api_key: str | None = None,
     json_file: str | None = None,
     category: str | None = None,
+    queries: list[str] | None = None,
 ) -> None:
-    """Search Semantic Scholar by title or DOI and add records to archive or json file."""
+    """Search Semantic Scholar by title or DOI and add records to archive or json file.
+
+    Pass ``queries`` for non-interactive use; when omitted, titles/DOIs are
+    read interactively until an empty line.
+    """
     target = json_file or archive_path
     print("\nSemantic Scholar Paper Search")
     print(f"Search by: {by}")
     print(f"Target: {target}")
 
-    queries = []
-    print(f"\nEnter paper {by} (empty line to finish):")
-    while True:
-        line = input(f"  [{len(queries) + 1}] ").strip()
-        if not line:
-            break
-        queries.append(line)
+    if queries is None:
+        queries = []
+        print(f"\nEnter paper {by} (empty line to finish):")
+        while True:
+            line = input(f"  [{len(queries) + 1}] ").strip()
+            if not line:
+                break
+            queries.append(line)
 
     if not queries:
         print("\nNo papers to search.")

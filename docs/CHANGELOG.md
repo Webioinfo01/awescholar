@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- `updater search` now accepts paper titles/DOIs as positional arguments for non-interactive use (`awescholar updater search --archive data.json --by doi <doi1> <doi2>`); omitting them keeps the previous interactive prompt
+
 ## v0.2.0
 
 Backfill release — a new `updater backfill` command recovers missing affiliation/team fields from three web sources, and archive merges stop duplicating papers across categories.

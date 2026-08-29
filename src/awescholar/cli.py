@@ -222,7 +222,7 @@ def cmd_search_record(args: argparse.Namespace, config: dict) -> int | None:
     search_and_add(
         archive_path=args.archive, by=args.by,
         api_key=config["ss_api_key"], json_file=args.json_file,
-        category=args.category,
+        category=args.category, queries=args.queries or None,
     )
 
 
@@ -304,6 +304,7 @@ def main() -> int:
     p.add_argument("--description", type=str, help="Channel description")
 
     p = updater_sub.add_parser("search", help="Search Semantic Scholar by title/DOI and add to project data JSON")
+    p.add_argument("queries", nargs="*", help="Paper titles or DOIs (omit to enter interactively)")
     p.add_argument("--archive", type=str, help="Path to project data JSON")
     p.add_argument("--json-file", type=str, help="Save to a flat JSON list for review (instead of archive)")
     p.add_argument("--by", choices=["title", "doi"], default="title", help="Search by title or DOI (default: title)")

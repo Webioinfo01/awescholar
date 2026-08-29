@@ -200,6 +200,7 @@ awescholar updater rss --archive data.json            # Generate RSS feed
 awescholar updater search --json-file papers.json --by title   # Search, save for review
 awescholar updater search --archive data.json --by title       # Search and add directly
 awescholar updater search --archive data.json --category "AI Agents"  # Add to a specific category
+awescholar updater search --archive data.json --by doi 10.1038/s41467-025-59628-y  # Non-interactive: DOIs as arguments
 awescholar updater add --archive data.json            # Interactively add a record to project data JSON
 awescholar updater backfill --archive data.json       # Fill missing affiliation/team fields (Semantic Scholar + Crossref + OpenAlex)
 ```

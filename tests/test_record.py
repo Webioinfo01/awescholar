@@ -198,3 +198,43 @@ def test_search_and_add_archive_defaults_to_first_category(MockSS, mock_input):
             data = json.load(f)
         assert len(data["AI Agents"]) == 1
         assert data["Reviews"] == []
+
+
+# ── search_and_add non-interactive (queries argument) ─────────
+
+@patch("awescholar.record.SemanticScholar")
+def test_search_and_add_queries_skips_input(MockSS):
+    mock_client = MagicMock()
+    MockSS.return_value = mock_client
+    mock_client.get_paper.return_value = _mock_paper(title="My Paper Title", doi="10.1/mp")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        archive = os.path.join(tmp, "data.json")
+        with open(archive, "w") as f:
+            json.dump({"AI Agents": [], "Reviews": []}, f)
+
+        search_and_add(archive_path=archive, by="doi", category="AI Agents",
+                       queries=["10.1/mp"])
+
+        with open(archive) as f:
+            data = json.load(f)
+        assert len(data["AI Agents"]) == 1
+        assert data["AI Agents"][0]["doi"] == "10.1/mp"
+
+
+@patch("awescholar.record.SemanticScholar")
+def test_search_and_add_queries_dedup_against_archive(MockSS):
+    mock_client = MagicMock()
+    MockSS.return_value = mock_client
+    mock_client.get_paper.return_value = _mock_paper(title="My Paper Title", doi="10.1/mp")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        archive = os.path.join(tmp, "data.json")
+        with open(archive, "w") as f:
+            json.dump({"AI Agents": [{"title": "My Paper Title", "doi": "10.1/mp"}]}, f)
+
+        search_and_add(archive_path=archive, by="doi", queries=["10.1/mp"])
+
+        with open(archive) as f:
+            data = json.load(f)
+        assert len(data["AI Agents"]) == 1
