@@ -241,6 +241,38 @@ def cmd_add(args: argparse.Namespace, config: dict) -> int | None:
     add_interactive(archive_path=args.archive, categories=config.get("categories"))
 
 
+def _bind_preview_server(docs_dir: str, port: int):
+    """Bind a 127.0.0.1 static server for docs_dir; tries up to 10 consecutive ports."""
+    from functools import partial
+    from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+
+    handler = partial(SimpleHTTPRequestHandler, directory=docs_dir)
+    for candidate in range(port, port + 10):
+        try:
+            return ThreadingHTTPServer(("127.0.0.1", candidate), handler)
+        except OSError:
+            continue
+    return None
+
+
+def serve_preview(docs_dir: str, port: int = 8000) -> None:
+    """Serve docs_dir on 127.0.0.1 for local review; blocks until Ctrl+C."""
+    server = _bind_preview_server(docs_dir, port)
+    if server is None:
+        print(f"Warning: ports {port}-{port + 9} on 127.0.0.1 are busy; skipping local preview.",
+              flush=True)
+        return
+    print(f"\nLocal preview: http://127.0.0.1:{server.server_address[1]}/  (Ctrl+C to stop)",
+          flush=True)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
+    print("\nPreview stopped.")
+
+
 def cmd_init(args: argparse.Namespace, config: dict) -> int | None:
     from .scaffold import run_init
 
@@ -265,6 +297,8 @@ def cmd_init(args: argparse.Namespace, config: dict) -> int | None:
         status(f"created {path}")
     print(f"\nScaffolded {len(created)} files. Next: edit config.json, then add papers with"
           " 'awescholar updater add --archive docs/data.json'.")
+    if not args.no_serve:
+        serve_preview(os.path.join(args.target_dir, "docs"), port=args.port)
 
 
 def cmd_counts(args: argparse.Namespace, config: dict) -> int | None:
@@ -384,6 +418,10 @@ def main() -> int:
     p.add_argument("--no-branding", action="store_true", help="Skip ecosystem/support sections and Webioinfo links")
     p.add_argument("--tables", action="store_true",
                    help="Also embed AWESCHOLAR table markers (classic in-README tables)")
+    p.add_argument("--no-serve", action="store_true",
+                   help="Skip serving a local preview of docs/ after scaffolding")
+    p.add_argument("--port", type=int, default=8000,
+                   help="Local preview port (default: 8000; auto-increments while busy)")
     p.add_argument("--force", action="store_true", help="Proceed even if the target directory is not empty")
 
     args = parser.parse_args()

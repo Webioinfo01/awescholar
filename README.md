@@ -190,6 +190,8 @@ awescholar init --title "Awesome AI Foo" --github-repo Webioinfo01/Awesome-AI-Fo
                  --website http://foo.webioinfo.top/ --category "AI Agents" --category Reviews
 awescholar init --no-zh --no-branding                 # English-only README, no ecosystem/support sections
 awescholar init --tables                              # Classic mode: also embed README table markers
+awescholar init --no-serve                            # Skip the local preview server (e.g. in scripts)
+awescholar init --port 8123                           # Preview on another port (default: 8000)
 
 # Paper discovery pipeline
 awescholar crawler search "query"                     # Search Semantic Scholar
@@ -221,7 +223,7 @@ Each subcommand accepts `--input` (or positional `input` for report) to read fro
 
 When `--readme` is not specified, `updater readme` auto-discovers all `README*.md` / `readme*.md` files in the current working directory that contain `<!-- AWESCHOLAR:START -->` markers and updates each one. This is useful for maintaining multilingual READMEs (e.g., `readme.md` + `README.zh-CN.md`) — the table content stays in sync automatically.
 
-`awescholar init` scaffolds a complete website-first repository — like [Awesome-AI-Meets-Biology](https://github.com/Webioinfo01/Awesome-AI-Meets-Biology) — in one command: bilingual landing-page READMEs, a searchable statistics website (`--template bio` or `--template vt`), an empty `docs/data.json` wired into `config.json`, an RSS feed, MPL-2.0 `LICENSE`, `CONTRIBUTING.md`, and `.gitignore`. A custom `--website` domain also writes `docs/CNAME` for GitHub Pages. All options are optional: bare `awescholar init` in an empty directory uses the Awesome-AI-Meets-Biology identity and defaults. For repos whose papers live on the website (no embedded tables), run `awescholar updater counts --archive docs/data.json` after merging new papers — it refreshes the per-category counts, totals, and badges in every README it finds.
+`awescholar init` scaffolds a complete website-first repository — like [Awesome-AI-Meets-Biology](https://github.com/Webioinfo01/Awesome-AI-Meets-Biology) — in one command: bilingual landing-page READMEs, a searchable statistics website (`--template bio` or `--template vt`), an empty `docs/data.json` wired into `config.json`, an RSS feed, MPL-2.0 `LICENSE`, `CONTRIBUTING.md`, and `.gitignore`. A custom `--website` domain also writes `docs/CNAME` for GitHub Pages. All options are optional: bare `awescholar init` in an empty directory uses the Awesome-AI-Meets-Biology identity and defaults. After scaffolding, init serves `docs/` at `http://127.0.0.1:8000/` so you can review the site before pushing (the page fetches `data.json`, so it needs an HTTP server rather than a double-click); stop it with Ctrl+C, skip it with `--no-serve`, or pick another port with `--port`. For repos whose papers live on the website (no embedded tables), run `awescholar updater counts --archive docs/data.json` after merging new papers — it refreshes the per-category counts, totals, and badges in every README it finds.
 
 ## Development
 

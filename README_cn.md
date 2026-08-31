@@ -190,6 +190,8 @@ awescholar init --title "Awesome AI Foo" --github-repo Webioinfo01/Awesome-AI-Fo
                  --website http://foo.webioinfo.top/ --category "AI Agents" --category Reviews
 awescholar init --no-zh --no-branding                 # 仅英文 README、不含生态/赞赏区块
 awescholar init --tables                              # 经典模式：同时内嵌 README 表格 marker
+awescholar init --no-serve                            # 跳过本地预览服务器（脚本场景）
+awescholar init --port 8123                           # 换预览端口（默认 8000）
 
 # 论文发现流水线
 awescholar crawler search "query"                     # 搜索 Semantic Scholar
@@ -218,7 +220,7 @@ awescholar updater add --archive data.json            # 交互式添加单条记
 
 当不指定 `--readme` 时，`updater readme` 会自动发现当前工作目录下所有包含 `<!-- AWESCHOLAR:START -->` 标记的 `README*.md` / `readme*.md` 文件并逐一更新。这适用于维护多语言 README（如 `readme.md` + `README.zh-CN.md`）— 表格内容自动保持同步。
 
-`awescholar init` 一条命令生成完整的 website-first 仓库（类似 [Awesome-AI-Meets-Biology](https://github.com/Webioinfo01/Awesome-AI-Meets-Biology)）：中英双语落地页 README、带搜索和统计的网站（`--template bio` 或 `--template vt`）、接入 `config.json` 的空 `docs/data.json`、RSS 订阅、MPL-2.0 `LICENSE`、`CONTRIBUTING.md` 和 `.gitignore`。`--website` 传入自定义域名时会额外写入 `docs/CNAME`（GitHub Pages 用）。所有选项都可省略：在空目录里裸跑 `awescholar init` 即使用 Awesome-AI-Meets-Biology 的身份和默认值。对于论文数据只上网站（README 不内嵌表格）的仓库，合并新论文后运行 `awescholar updater counts --archive docs/data.json`，会刷新所有 README 里的分类计数、总数和 badge。
+`awescholar init` 一条命令生成完整的 website-first 仓库（类似 [Awesome-AI-Meets-Biology](https://github.com/Webioinfo01/Awesome-AI-Meets-Biology)）：中英双语落地页 README、带搜索和统计的网站（`--template bio` 或 `--template vt`）、接入 `config.json` 的空 `docs/data.json`、RSS 订阅、MPL-2.0 `LICENSE`、`CONTRIBUTING.md` 和 `.gitignore`。`--website` 传入自定义域名时会额外写入 `docs/CNAME`（GitHub Pages 用）。所有选项都可省略：在空目录里裸跑 `awescholar init` 即使用 Awesome-AI-Meets-Biology 的身份和默认值。生成完毕后 init 会默认把 `docs/` 挂到 `http://127.0.0.1:8000/` 供推送前本地检查（页面通过 `fetch` 读取 `data.json`，直接双击打开会因 CORS 加载失败），Ctrl+C 停止，`--no-serve` 跳过，`--port` 换端口。对于论文数据只上网站（README 不内嵌表格）的仓库，合并新论文后运行 `awescholar updater counts --archive docs/data.json`，会刷新所有 README 里的分类计数、总数和 badge。
 
 ## 开发
 
