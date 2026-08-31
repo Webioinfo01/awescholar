@@ -182,6 +182,15 @@ Supported LLM providers: any OpenAI-compatible API via `base_url` (e.g. GLM, Dee
 ```bash
 awescholar -v                                         # Show version
 
+# Scaffold a new curated paper-list repository
+awescholar init                                       # Website-first repo in the current directory (Biology defaults)
+awescholar init awesome-ai-foo                        # Scaffold into a subdirectory
+awescholar init --template vt                         # Awesome-AI-Virtual-Tumor style website (default: bio)
+awescholar init --title "Awesome AI Foo" --github-repo Webioinfo01/Awesome-AI-Foo \
+                 --website http://foo.webioinfo.top/ --category "AI Agents" --category Reviews
+awescholar init --no-zh --no-branding                 # English-only README, no ecosystem/support sections
+awescholar init --tables                              # Classic mode: also embed README table markers
+
 # Paper discovery pipeline
 awescholar crawler search "query"                     # Search Semantic Scholar
 awescholar crawler annotate                           # Annotate papers in DB
@@ -196,6 +205,7 @@ awescholar crawler run ["query"]                      # Full pipeline (query opt
 awescholar updater update --direction new2old --input X --archive data.json  # Merge to project data JSON
 awescholar updater readme --archive data.json         # Generate README tables (with .bak backup)
 awescholar updater readme --archive data.json --no-backup  # Generate README without backup
+awescholar updater counts --archive data.json         # Refresh website-first README paper counts
 awescholar updater rss --archive data.json            # Generate RSS feed
 awescholar updater search --json-file papers.json --by title   # Search, save for review
 awescholar updater search --archive data.json --by title       # Search and add directly
@@ -210,6 +220,8 @@ Each subcommand accepts `--input` (or positional `input` for report) to read fro
 `updater readme` updates only the generated region between `<!-- AWESCHOLAR:START -->` and `<!-- AWESCHOLAR:END -->`. That generated region contains the awescholar table of contents and category tables. Keep custom headings, citation, and project text outside that region. Existing README files without those markers are rejected instead of being overwritten. If the README does not exist yet, `--title` controls the generated top-level heading.
 
 When `--readme` is not specified, `updater readme` auto-discovers all `README*.md` / `readme*.md` files in the current working directory that contain `<!-- AWESCHOLAR:START -->` markers and updates each one. This is useful for maintaining multilingual READMEs (e.g., `readme.md` + `README.zh-CN.md`) — the table content stays in sync automatically.
+
+`awescholar init` scaffolds a complete website-first repository — like [Awesome-AI-Meets-Biology](https://github.com/Webioinfo01/Awesome-AI-Meets-Biology) — in one command: bilingual landing-page READMEs, a searchable statistics website (`--template bio` or `--template vt`), an empty `docs/data.json` wired into `config.json`, an RSS feed, MPL-2.0 `LICENSE`, `CONTRIBUTING.md`, and `.gitignore`. A custom `--website` domain also writes `docs/CNAME` for GitHub Pages. All options are optional: bare `awescholar init` in an empty directory uses the Awesome-AI-Meets-Biology identity and defaults. For repos whose papers live on the website (no embedded tables), run `awescholar updater counts --archive docs/data.json` after merging new papers — it refreshes the per-category counts, totals, and badges in every README it finds.
 
 ## Development
 

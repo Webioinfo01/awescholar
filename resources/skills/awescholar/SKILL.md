@@ -13,11 +13,13 @@ Match the user's intent to a task domain, then follow the workflow below.
 
 | User intent | Domain | First command |
 |---|---|---|
+| "Create a new awesome paper list repo", "scaffold a curated list" | Init | `awescholar init <dir> --title ... --github-repo ... --website ...` |
 | "Search for papers about X", "find recent papers" | Crawler Pipeline | `awescholar --config cfg.json crawler search "query"` |
 | "Run the full discovery pipeline" | Crawler Pipeline | `awescholar --config cfg.json crawler run "query"` |
-| "Update the project", "full update", "merge and update" | Updater Full | `updater update` → `updater readme` → `updater rss` |
+| "Update the project", "full update", "merge and update" | Updater Full | `updater update` → `updater counts` (website-first) or `updater readme` (tables) → `updater rss` |
 | "Merge new results into project data", "update the archive" | Updater Merge | `awescholar updater update --direction new2old --input X --archive Y` |
 | "Update the README table" | Updater README | `awescholar updater readme --archive data.json` |
+| "Refresh README paper counts" | Updater Counts | `awescholar updater counts --archive docs/data.json` |
 | "Generate RSS feed" | Updater RSS | `awescholar updater rss --archive data.json` |
 | "Add a paper by title/DOI search" | Updater Search | `awescholar updater search --json-file papers.json` |
 | "Manually add a paper record" | Updater Add | `awescholar updater add --archive data.json` |
@@ -38,6 +40,25 @@ Match the user's intent to a task domain, then follow the workflow below.
 5. For `updater readme`: default behavior creates a timestamped `.bak` backup. Use `--no-backup` to skip.
 
 ## Workflows
+
+### Init (Scaffold a New Repository)
+
+Use when creating a brand-new curated paper-list repository. Generates bilingual website-first READMEs, a searchable statistics website, an empty `docs/data.json` wired into `config.json`, RSS, LICENSE, CONTRIBUTING.md, and `.gitignore`.
+
+```bash
+# Everything optional — bare init in an empty dir uses Awesome-AI-Meets-Biology defaults
+awescholar init ./my-awesome-list --title "Awesome AI Foo" \
+    --subtitle "A curated survey of AI for foo" \
+    --github-repo Webioinfo01/Awesome-AI-Foo \
+    --website http://foo.webioinfo.top/ \
+    --category "AI Agents" --category "Foundation models" --category Reviews
+
+awescholar init --template vt          # Awesome-AI-Virtual-Tumor style website (default: bio)
+awescholar init --no-zh --no-branding  # English-only README, no ecosystem/support sections
+awescholar init --tables               # also embed classic AWESCHOLAR README table markers
+```
+
+After init: edit `config.json` (model keys, search query), then add papers with `updater add` / `updater search`. For website-first repos (no embedded tables), refresh README counts with `updater counts` after merging papers.
 
 ### Crawler Pipeline
 
@@ -137,6 +158,15 @@ awescholar updater readme --archive docs/data.json --readme readme.md --title "M
 ```
 
 Default backup creates `{readme}.{YYYYMMDD_HHMMSS}.bak` before overwriting.
+
+### Updater Counts
+
+Use when the repo is website-first (papers live on the website, README shows links and counts only). Refresh after every merge.
+
+```bash
+awescholar updater counts --archive docs/data.json
+# updates readme.md + README.zh-CN.md in cwd; --readme <path> to target specific files
+```
 
 ### Updater RSS
 

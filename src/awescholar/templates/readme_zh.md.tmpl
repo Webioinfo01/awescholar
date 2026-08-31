@@ -1,0 +1,61 @@
+<div align="center">
+  <h1>{{TITLE}}{{AWESKILL_BADGE}}</h1>
+  <p><strong>{{SUBTITLE_ZH}}。</strong></p>
+  <p>论文发现、标注和筛选由 <a href="https://github.com/Webioinfo01/awescholar">awescholar</a> 驱动。技能管理通过 <a href="https://aweskill.webioinfo.top/">aweskill</a> 实现。</p>
+  <p>
+{{NAV_LINKS_ZH}}
+  </p>
+  <p>
+    <a href="{{WEBSITE}}"><img src="https://img.shields.io/website?url={{WEBSITE_ENCODED}}&style=flat-square" alt="Website"></a>
+    <a href="{{GITHUB_REPO_URL}}"><img src="https://img.shields.io/github/stars/{{GITHUB_REPO_PATH}}?style=social" alt="GitHub Stars"></a>
+    <a href="{{GITHUB_REPO_URL}}"><img src="https://visitor-badge.laobi.icu/badge?page_id={{GITHUB_REPO_PATH_DOT}}&style=flat-square" alt="Visitors"></a>
+  </p>
+  <p>
+    <img src="https://img.shields.io/badge/license-MPL--2.0-22C55E?style=flat-square" alt="License">
+    <img src="https://img.shields.io/badge/categories-{{N_CATEGORIES}}-7C3AED?style=flat-square" alt="Categories">
+    <img src="https://img.shields.io/badge/papers-{{TOTAL}}-0EA5E9?style=flat-square" alt="Papers">
+    <img src="https://img.shields.io/badge/updated-{{YEAR_MONTH}}-334155?style=flat-square" alt="Last updated">
+  </p>
+</div>
+
+> 访问官方网站：{{WEBSITE}}
+
+本项目由我们自主研发的 AI agent 和人类专家以人机协同（human-in-the-loop）的方式共同维护，结合自动化发现与专家审核。论文发现、标注和筛选由 [awescholar](https://github.com/Webioinfo01/awescholar) — 一个 AI agent 可操作的科学文献策展工具驱动。
+
+{{CATEGORIES_SENTENCE_ZH}}
+
+## 📋 目录
+- [🌐 浏览全部内容](#浏览全部内容)
+- [贡献指南](#贡献指南)
+- [引用](#引用)
+
+## 🌐 浏览全部内容
+
+全部 {{TOTAL}} 篇论文都在[网站]({{WEBSITE}})上 — 支持按论文、团队、领域、期刊即时搜索，分类切换和年度统计：
+
+**→ {{WEBSITE}}**
+
+{{CATEGORY_BULLETS_ZH}}
+
+机器可读数据：[`docs/data.json`](docs/data.json) — {{TOTAL}} 条完整元数据（团队、机构、期刊、代码链接）。
+{{TABLES_BLOCK}}
+{{BRANDING_SECTIONS_ZH}}## 贡献指南
+
+欢迎贡献！请参阅 [CONTRIBUTING.md](CONTRIBUTING.md) 了解如何添加新条目。
+
+## 许可证
+
+本项目采用 Mozilla Public License 2.0 许可证 - 详见 [LICENSE](LICENSE) 文件。
+
+## 引用
+
+如果您在研究中发现本仓库有用，请考虑引用：
+
+```bibtex
+@misc{{{BIBTEX_KEY}},
+  title={{{TITLE}}},
+  author={{{AUTHOR}}},
+  year={{{YEAR}}},
+  url={{{GITHUB_REPO_URL}}}
+}
+```

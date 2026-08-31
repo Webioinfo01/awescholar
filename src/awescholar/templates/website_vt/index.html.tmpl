@@ -1,0 +1,1069 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{TITLE}}</title>
+    <meta name="description" content="{{DESCRIPTION}}">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #d946ef 100%);
+            --secondary-gradient: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
+            --success-gradient: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            --dark-bg: #0f172a;
+            --card-bg: #1e293b;
+            --text-primary: #f8fafc;
+            --text-secondary: #cbd5e1;
+            --border-color: #334155;
+            --hover-bg: #334155;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            color: var(--text-primary);
+            background: var(--dark-bg);
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.1) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(139, 92, 246, 0.1) 0px, transparent 50%);
+            background-attachment: fixed;
+        }
+
+        /* Header */
+        .header {
+            background: var(--primary-gradient);
+            padding: 3rem 0 2rem;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url('data:image/svg+xml,<svg width="100" height="100" xmlns="http://www.w3.org/2000/svg"><defs><pattern id="grid" width="100" height="100" patternUnits="userSpaceOnUse"><path d="M 100 0 L 0 0 0 100" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="1"/></pattern></defs><rect width="100" height="100" fill="url(%23grid)"/></svg>');
+            opacity: 0.5;
+        }
+
+        .header-content {
+            position: relative;
+            z-index: 1;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+
+        .header h1 {
+            font-size: 3.5rem;
+            font-weight: 800;
+            margin-bottom: 1rem;
+            background: linear-gradient(to right, #fff, #f0f9ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .header-subtitle {
+            font-size: 1.25rem;
+            opacity: 0.95;
+            max-width: 800px;
+            margin: 0 auto 2rem;
+            line-height: 1.8;
+        }
+
+        .header-badges {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 1.5rem;
+        }
+
+        .badge {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            padding: 0.5rem 1.25rem;
+            border-radius: 50px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: all 0.3s;
+        }
+
+        .badge:hover {
+            background: rgba(255, 255, 255, 0.25);
+            transform: translateY(-2px);
+        }
+
+        /* GitHub Star Button */
+        .github-star-button {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            background: rgba(30, 41, 59, 0.95);
+            backdrop-filter: blur(10px);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            transition: all 0.3s;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .github-star-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 30px rgba(99, 102, 241, 0.4);
+            background: rgba(99, 102, 241, 0.9);
+        }
+
+        .star-icon {
+            color: #fbbf24;
+            font-size: 18px;
+        }
+
+        /* Container */
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+
+        /* Stats Dashboard */
+        .stats-dashboard {
+            background: rgba(30, 41, 59, 0.6);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 2rem;
+            margin: -3rem auto 3rem;
+            max-width: 1400px;
+            position: relative;
+            z-index: 10;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .stat-card {
+            text-align: center;
+            padding: 1rem;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            transition: all 0.3s;
+        }
+
+        .stat-card:hover {
+            background: rgba(255, 255, 255, 0.06);
+            transform: translateY(-2px);
+        }
+
+        .stat-number {
+            font-size: 2rem;
+            font-weight: 800;
+            background: var(--primary-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .stat-label {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-top: 0.5rem;
+        }
+
+        /* Charts Section */
+        .charts-section {
+            margin: 3rem auto;
+        }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+
+        .chart-card {
+            background: rgba(30, 41, 59, 0.6);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 2rem;
+            height: 450px;
+        }
+
+        .chart-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 1.5rem;
+            color: var(--text-primary);
+        }
+
+        /* Search Section */
+        .search-section {
+            margin: 3rem auto;
+            text-align: center;
+        }
+
+        .search-wrapper {
+            position: relative;
+            max-width: 700px;
+            margin: 0 auto;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 1.25rem 1.25rem 1.25rem 3.5rem;
+            background: rgba(30, 41, 59, 0.6);
+            backdrop-filter: blur(10px);
+            border: 2px solid var(--border-color);
+            border-radius: 50px;
+            font-size: 1.1rem;
+            color: var(--text-primary);
+            transition: all 0.3s;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: #6366f1;
+            box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+        }
+
+        .search-input::placeholder {
+            color: var(--text-secondary);
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 1.5rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-secondary);
+            font-size: 1.2rem;
+        }
+
+        /* Category Navigation */
+        .category-nav {
+            margin: 3rem auto;
+            background: rgba(30, 41, 59, 0.6);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 1.5rem;
+            overflow-x: auto;
+        }
+
+        .category-tabs {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .category-tab {
+            padding: 0.75rem 1.5rem;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 50px;
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 0.9rem;
+            transition: all 0.3s;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .category-tab:hover {
+            background: rgba(255, 255, 255, 0.08);
+            color: var(--text-primary);
+            transform: translateY(-2px);
+        }
+
+        .category-tab.active {
+            background: var(--primary-gradient);
+            color: white;
+            border-color: transparent;
+        }
+
+        .category-count {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 0.15rem 0.6rem;
+            border-radius: 50px;
+            font-size: 0.85rem;
+        }
+
+        /* Content Sections */
+        .content-section {
+            background: rgba(30, 41, 59, 0.6);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            margin-bottom: 2rem;
+            overflow: hidden;
+        }
+
+        .section-header {
+            background: var(--primary-gradient);
+            padding: 1.5rem 2rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .section-title {
+            font-size: 1.75rem;
+            font-weight: 700;
+            flex: 1;
+        }
+
+        .section-count-badge {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 0.5rem 1rem;
+            border-radius: 50px;
+            font-size: 1rem;
+            font-weight: 600;
+        }
+
+        /* Table */
+        .table-wrapper {
+            overflow-x: auto;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .data-table thead {
+            background: rgba(255, 255, 255, 0.03);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .data-table th {
+            padding: 1.25rem 1.5rem;
+            text-align: left;
+            font-weight: 700;
+            color: var(--text-primary);
+            border-bottom: 2px solid var(--border-color);
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .data-table td {
+            padding: 1.25rem 1.5rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .data-table tbody tr {
+            transition: all 0.2s;
+        }
+
+        .data-table tbody tr:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .paper-title {
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 0.25rem;
+            font-size: 1rem;
+        }
+
+        .paper-link {
+            color: #60a5fa;
+            text-decoration: none;
+            font-size: 0.9rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.2s;
+        }
+
+        .paper-link:hover {
+            color: #93c5fd;
+            text-decoration: underline;
+        }
+
+        .team-info {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .domain-tag {
+            background: rgba(14, 165, 233, 0.15);
+            color: #38bdf8;
+            padding: 0.35rem 0.75rem;
+            border-radius: 50px;
+            font-size: 0.85rem;
+            display: inline-block;
+            border: 1px solid rgba(14, 165, 233, 0.3);
+        }
+
+        .venue-badge {
+            background: rgba(139, 92, 246, 0.15);
+            color: #a78bfa;
+            padding: 0.35rem 0.75rem;
+            border-radius: 50px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            border: 1px solid rgba(139, 92, 246, 0.3);
+        }
+
+        .category-badge {
+            background: rgba(16, 185, 129, 0.15);
+            color: #34d399;
+            padding: 0.35rem 0.75rem;
+            border-radius: 50px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .github-stars {
+            margin-left: 0.5rem;
+            vertical-align: middle;
+        }
+
+        /* Footer */
+        .footer {
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(10px);
+            border-top: 1px solid var(--border-color);
+            padding: 3rem 0;
+            margin-top: 5rem;
+            text-align: center;
+        }
+
+        .footer-links {
+            display: flex;
+            gap: 2rem;
+            justify-content: center;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+        }
+
+        .footer-link {
+            color: var(--text-secondary);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.3s;
+        }
+
+        .footer-link:hover {
+            color: var(--text-primary);
+        }
+
+        /* Scroll Buttons */
+        .scroll-button {
+            position: fixed;
+            right: 20px;
+            z-index: 999;
+            background: rgba(99, 102, 241, 0.9);
+            backdrop-filter: blur(10px);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 50px;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            transition: all 0.3s;
+        }
+
+        .scroll-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 30px rgba(99, 102, 241, 0.5);
+        }
+
+        #scroll-to-bottom {
+            bottom: 80px;
+        }
+
+        #scroll-to-top {
+            bottom: 20px;
+            display: none;
+        }
+
+        /* Loading */
+        .loading {
+            text-align: center;
+            padding: 4rem 0;
+        }
+
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid rgba(99, 102, 241, 0.1);
+            border-top-color: #6366f1;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1.5rem;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 2rem;
+            }
+
+            .header-subtitle {
+                font-size: 1rem;
+            }
+
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .category-tabs {
+                flex-direction: column;
+            }
+
+            .category-tab {
+                justify-content: center;
+            }
+
+            .data-table th,
+            .data-table td {
+                padding: 0.75rem;
+                font-size: 0.85rem;
+            }
+
+            .github-star-button {
+                padding: 10px 16px;
+                font-size: 0.85rem;
+            }
+        }
+    </style>
+  </head>
+<body>
+    <!-- GitHub Star Button -->
+    <a href="{{GITHUB_URL}}" 
+       class="github-star-button" 
+       target="_blank">
+        <i class="fas fa-star star-icon"></i>
+        <span>Star on GitHub</span>
+    </a>
+
+    <!-- Scroll Buttons -->
+    <button id="scroll-to-bottom" class="scroll-button">
+        <i class="fas fa-arrow-down"></i>
+        <span>Bottom</span>
+    </button>
+    <button id="scroll-to-top" class="scroll-button">
+        <i class="fas fa-arrow-up"></i>
+        <span>Top</span>
+    </button>
+
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <h1><i class="fas fa-dna"></i> {{TITLE}}</h1>
+            <p class="header-subtitle">
+                {{TAGLINE}}
+            </p>
+            <div class="header-badges">
+{{TOPIC_BADGES}}
+            </div>
+        </div>
+    </header>
+
+        <div class="container">
+        <!-- Stats Dashboard -->
+        <div class="stats-dashboard hidden">
+            <div class="stats-grid" id="stats-grid">
+                <!-- Stats will be populated by JavaScript -->
+        </div>
+    </div>
+
+        <!-- Charts Section -->
+        <section class="charts-section">
+            <div class="charts-grid">
+                <div class="chart-card">
+                    <h3 class="chart-title"><i class="fas fa-chart-pie"></i> Projects by Category</h3>
+                    <canvas id="categoryChart"></canvas>
+                </div>
+                <div class="chart-card">
+                    <h3 class="chart-title"><i class="fas fa-chart-bar"></i> Projects by Year</h3>
+                    <canvas id="yearChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- Search Section -->
+        <section class="search-section">
+            <div class="search-wrapper">
+                <i class="fas fa-search search-icon"></i>
+                <input type="text" 
+                       class="search-input" 
+                       id="searchInput"
+                       placeholder="Search papers, teams, domains, or venues...">
+            </div>
+        </section>
+
+        <!-- Category Navigation -->
+        <nav class="category-nav">
+            <div class="category-tabs" id="category-tabs">
+                <!-- Tabs will be populated by JavaScript -->
+        </div>
+    </nav>
+
+        <!-- Loading -->
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+            <p>{{LOADING_TEXT}}</p>
+            </div>
+
+        <!-- Content -->
+        <main id="content" class="hidden">
+            <!-- Sections will be populated by JavaScript -->
+        </main>
+                    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-links">
+                <a href="{{GITHUB_URL}}" class="footer-link">
+                    <i class="fab fa-github"></i> GitHub Repository
+                </a>
+                <a href="{{GITHUB_README_URL}}" class="footer-link">
+                    <i class="fas fa-book"></i> Documentation
+                </a>
+                <a href="rss.xml" class="footer-link" target="_blank">
+                    <i class="fas fa-rss"></i> RSS Feed
+                </a>
+                <a href="mailto:{{CONTACT_EMAIL}}" class="footer-link">
+                    <i class="fas fa-envelope"></i> Contact
+                </a>
+            </div>
+            <p style="color: var(--text-secondary);">&copy; {{YEAR}} {{TITLE}}. Licensed under MPL-2.0.</p>
+        </div>
+    </footer>
+    
+    <script>
+        // Global data
+        let projectData = {};
+        let stats = {};
+        let allProjects = [];
+
+        // Map data.json category names to HTML section IDs
+        function categoryToSectionId(cat) {
+            return cat.toLowerCase().trim()
+                .replace(/[^a-z0-9]+/g, '-')
+                .replace(/^-|-$/g, '');
+        }
+
+        // Category metadata
+        const categoryMetadata = {{CATEGORY_METADATA_JS}};
+
+        // Load data
+        fetch('data.json')
+          .then(response => response.json())
+          .then(data => {
+            projectData = data;
+                
+                // Calculate stats
+            for (const [cat, arr] of Object.entries(data)) {
+              if (Array.isArray(arr)) {
+                stats[categoryToSectionId(cat)] = arr.length;
+              }
+            }
+                stats['all-projects'] = Object.values(stats).reduce((a, b) => a + b, 0);
+
+                // Combine all projects
+                allProjects = [];
+                Object.keys(projectData).forEach(categoryKey => {
+                    projectData[categoryKey].forEach(project => {
+                        allProjects.push({
+                            ...project,
+                            category: categoryMetadata[categoryToSectionId(categoryKey)]?.name || categoryKey
+                        });
+                    });
+                });
+                allProjects.sort((a, b) => parseFloat(b.year) - parseFloat(a.year));
+
+            init();
+          })
+          .catch(error => {
+                console.error('Failed to load data.json:', error);
+                document.getElementById('loading').innerHTML = '<p style="color: #ef4444;">Failed to load data. Please try again later.</p>';
+            });
+
+        function init() {
+            setTimeout(() => {
+                document.getElementById('loading').classList.add('hidden');
+                document.getElementById('content').classList.remove('hidden');
+                
+                renderCategoryTabs();
+                renderSections();
+                initCharts();
+            setupEventListeners();
+                showSection('all-projects');
+
+                // Deep-link support: open the category named in the URL hash (e.g. #static-models)
+                const hash = window.location.hash ? window.location.hash.slice(1) : '';
+                const deepTab = hash ? document.querySelector(`.category-tab[data-section="${hash}"]`) : null;
+                if (deepTab) {
+                    showSection(hash);
+                    document.querySelectorAll('.category-tab').forEach(t => t.classList.remove('active'));
+                    deepTab.classList.add('active');
+                }
+            }, 800);
+        }
+
+        function renderStats() {
+            const statsGrid = document.getElementById('stats-grid');
+            let html = '';
+            
+            // Add "All Entries" first
+            html += `
+                <div class="stat-card">
+                    <div class="stat-number">${stats['all-projects'] || 0}</div>
+                    <div class="stat-label">Total Entries</div>
+                </div>
+            `;
+            
+            // Add other categories
+            Object.keys(categoryMetadata).forEach(key => {
+                if (key !== 'all-projects' && stats[key] !== undefined) {
+                    html += `
+                        <div class="stat-card">
+                            <div class="stat-number">${stats[key]}</div>
+                            <div class="stat-label">${categoryMetadata[key].name}</div>
+                        </div>
+                    `;
+                }
+            });
+            
+            statsGrid.innerHTML = html;
+        }
+
+        function renderCategoryTabs() {
+            const tabsContainer = document.getElementById('category-tabs');
+            let html = '';
+            
+            Object.keys(categoryMetadata).forEach(key => {
+                if (stats[key] !== undefined) {
+                    const meta = categoryMetadata[key];
+                    html += `
+                        <a href="#${key}" 
+                           class="category-tab ${key === 'all-projects' ? 'active' : ''}" 
+                           data-section="${key}">
+                            <i class="fas ${meta.icon}"></i>
+                            <span>${meta.name}</span>
+                            <span class="category-count">${stats[key]}</span>
+                        </a>
+                    `;
+                }
+            });
+            
+            tabsContainer.innerHTML = html;
+        }
+
+        function renderSections() {
+            const content = document.getElementById('content');
+            let html = '';
+            
+            // All projects section
+            html += createSection('all-projects', allProjects, true);
+            
+            // Category sections
+            Object.keys(projectData).forEach(key => {
+                if (projectData[key] && Array.isArray(projectData[key])) {
+                    html += createSection(categoryToSectionId(key), projectData[key], false);
+                }
+            });
+            
+            content.innerHTML = html;
+        }
+
+        function createSection(sectionId, data, showCategory) {
+            const meta = categoryMetadata[sectionId] || { icon: 'fa-folder', name: sectionId };
+            
+            return `
+                <section class="content-section hidden" id="${sectionId}">
+                    <div class="section-header">
+                        <i class="fas ${meta.icon}"></i>
+                        <h2 class="section-title">${meta.name}</h2>
+                        <span class="section-count-badge">${data.length} entries</span>
+                    </div>
+                    <div class="table-wrapper">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Year</th>
+                                    <th>Title</th>
+                                    <th>Team</th>
+                                    <th>Domain</th>
+                                    ${showCategory ? '<th>Category</th>' : ''}
+                                    <th>Venue</th>
+                                    <th>Links</th>
+                </tr>
+                            </thead>
+                            <tbody>
+                                ${data.map(item => createTableRow(item, showCategory)).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            `;
+        }
+
+        function createTableRow(item, showCategory) {
+            const githubStarsImg = item.githubStars ? 
+                `<img src="${item.githubStars}" alt="GitHub Stars" class="github-stars">` : '';
+            
+            return `
+                <tr>
+                    <td>${item.year}</td>
+                    <td>
+                        <div class="paper-title">${item.title}</div>
+                    </td>
+                    <td><span class="team-info">${item.team || ''}</span></td>
+                    <td><span class="domain-tag">${item.domain}</span></td>
+                    ${showCategory ? `<td><span class="category-badge">${item.category}</span></td>` : ''}
+                    <td><span class="venue-badge">${item.venue}</span></td>
+                    <td>
+                        ${item.paperUrl ? `<a href="${item.paperUrl}" class="paper-link" target="_blank">
+                            <i class="fas fa-file-alt"></i> Paper
+                        </a>` : ''}
+                        ${item.codeUrl ? `<br><a href="${item.codeUrl}" class="paper-link" target="_blank">
+                            <i class="fab fa-github"></i> Code
+                        </a> ${githubStarsImg}` : ''}
+                    </td>
+                </tr>
+            `;
+        }
+
+        function initCharts() {
+            // Category Chart
+            const categoryCtx = document.getElementById('categoryChart').getContext('2d');
+            const categoryLabels = [];
+            const categoryData = [];
+            const categoryColors = [
+                '#6366f1', '#8b5cf6', '#d946ef', '#ec4899', '#f43f5e',
+                '#f97316', '#f59e0b', '#eab308', '#84cc16', '#22c55e',
+                '#10b981', '#14b8a6', '#06b6d4', '#0ea5e9', '#3b82f6'
+            ];
+            
+            Object.keys(categoryMetadata).forEach((key, index) => {
+                if (key !== 'all-projects' && stats[key]) {
+                    categoryLabels.push(categoryMetadata[key].name);
+                    categoryData.push(stats[key]);
+                }
+            });
+            
+            new Chart(categoryCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: categoryLabels,
+                    datasets: [{
+                        data: categoryData,
+                        backgroundColor: categoryColors,
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                color: '#cbd5e1',
+                                padding: 15,
+                                font: { size: 11 }
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Year Chart
+            const yearCtx = document.getElementById('yearChart').getContext('2d');
+            const yearCounts = {};
+            let before2022Count = 0;
+            
+            allProjects.forEach(item => {
+                const year = String(item.year).split('.')[0];
+                if (year) {
+                    const yearNum = parseInt(year);
+                    if (yearNum < 2022) {
+                        before2022Count++;
+                    } else {
+                        yearCounts[year] = (yearCounts[year] || 0) + 1;
+                    }
+                }
+            });
+
+            // Create labels and data arrays
+            const sortedYears = Object.keys(yearCounts).sort((a, b) => parseInt(a) - parseInt(b));
+            const yearLabels = [];
+            const yearData = [];
+            
+            // Add "< 2022" first if there are any projects before 2022
+            if (before2022Count > 0) {
+                yearLabels.push('< 2022');
+                yearData.push(before2022Count);
+            }
+            
+            // Add years from 2022 onwards
+            sortedYears.forEach(year => {
+                yearLabels.push(year);
+                yearData.push(yearCounts[year]);
+            });
+
+            new Chart(yearCtx, {
+                type: 'bar',
+                data: {
+                    labels: yearLabels,
+                    datasets: [{
+                        label: 'Projects',
+                        data: yearData,
+                        backgroundColor: '#6366f1',
+                        borderRadius: 8,
+                        borderSkipped: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 1,
+                                color: '#cbd5e1'
+                            },
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.05)'
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                color: '#cbd5e1'
+                            },
+                            grid: {
+                                display: false
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function setupEventListeners() {
+            // Search
+            document.getElementById('searchInput').addEventListener('input', handleSearch);
+            
+            // Category tabs
+            document.querySelectorAll('.category-tab').forEach(tab => {
+                tab.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const sectionId = tab.getAttribute('data-section');
+                    showSection(sectionId);
+                    
+                    document.querySelectorAll('.category-tab').forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+                });
+            });
+            
+            // Scroll buttons
+            const topBtn = document.getElementById('scroll-to-top');
+            const bottomBtn = document.getElementById('scroll-to-bottom');
+            
+            topBtn.addEventListener('click', () => {
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            });
+            
+            bottomBtn.addEventListener('click', () => {
+                window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+            });
+            
+            window.addEventListener('scroll', () => {
+                if (window.scrollY > 300) {
+                    topBtn.style.display = 'flex';
+                } else {
+                    topBtn.style.display = 'none';
+                }
+
+                if (window.scrollY + window.innerHeight >= document.body.scrollHeight - 100) {
+                    bottomBtn.style.display = 'none';
+                } else {
+                    bottomBtn.style.display = 'flex';
+                }
+            });
+        }
+
+        function handleSearch() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            const rows = document.querySelectorAll('.data-table tbody tr');
+            
+            rows.forEach(row => {
+                const text = row.textContent.toLowerCase();
+                row.style.display = text.includes(searchTerm) ? '' : 'none';
+            });
+        }
+
+        function showSection(sectionId) {
+            document.querySelectorAll('.content-section').forEach(section => {
+                section.classList.add('hidden');
+            });
+            
+            const targetSection = document.getElementById(sectionId);
+            if (targetSection) {
+                targetSection.classList.remove('hidden');
+            }
+        }
+    </script>
+</body>
+</html>

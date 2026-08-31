@@ -1,0 +1,52 @@
+{
+    "model_profiles": {
+        "glm": {
+            "api_key": "${GLM_API_KEY}",
+            "base_url": "your-openai-compatible-endpoint"
+        },
+        "gemini": {
+            "api_key": "${GEMINI_API_KEY}",
+            "base_url": "your-openai-compatible-endpoint"
+        },
+        "mimo": {
+            "api_key": "${XIAOMI_API_KEY}",
+            "base_url": "your-openai-compatible-endpoint"
+        },
+        "openai": {
+            "api_key": "${OPENAI_API_KEY}",
+            "base_url": "your-openai-compatible-endpoint"
+        }
+    },
+    "model": {
+        "profile": "openai",
+        "name": "gpt-5.4-mini"
+    },
+    "agent_models": null,
+    "semantic_scholar": {
+        "api_key": "${SEMANTIC_SCHOLAR_API_KEY}"
+    },
+    "search": {
+        "query": "AI agent|large language model|foundation model",
+        "fields_of_study": ["Biology", "Medicine"],
+        "publication_date": "2025-12-15:2025-12-31",
+        "limit": 100,
+        "include_abstracts": true
+    },
+    "filter": {
+        "limit": 20,
+        "research_interests": null
+    },
+    "output": {
+        "db_path": "output",
+        "report_filename": null
+    },
+    "pipeline": {
+        "skip_search": false,
+        "use_updater_json": false,
+        "use_filtered_json": false,
+        "existing_json_path": null,
+        "merge_new_to_old": false,
+        "data_json_path": "docs/data.json"
+    },
+    "categories": {{CATEGORIES_JSON}}
+}

@@ -33,3 +33,23 @@ def test_version_uses_package_version_without_litellm_warning():
     assert result.returncode == 0
     assert combined.strip() == f"awescholar {metadata['project']['version']}"
     assert "LiteLLM" not in combined
+
+
+def test_init_help_does_not_load_litellm():
+    result = _run_cli("init", "--help")
+
+    combined = result.stdout + result.stderr
+    assert result.returncode == 0
+    assert "LiteLLM" not in combined
+    assert "--template" in combined
+
+
+def test_init_scaffolds_into_target_directory(tmp_path):
+    target = tmp_path / "repo"
+    result = subprocess.run(
+        [sys.executable, "-m", "awescholar.cli", "init", str(target)],
+        capture_output=True, text=True, check=False, cwd=tmp_path,
+    )
+    assert result.returncode == 0, result.stderr
+    assert (target / "readme.md").exists()
+    assert (target / "docs" / "data.json").exists()

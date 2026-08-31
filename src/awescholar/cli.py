@@ -241,6 +241,52 @@ def cmd_add(args: argparse.Namespace, config: dict) -> int | None:
     add_interactive(archive_path=args.archive, categories=config.get("categories"))
 
 
+def cmd_init(args: argparse.Namespace, config: dict) -> int | None:
+    from .scaffold import run_init
+
+    try:
+        created = run_init(
+            target_dir=args.target_dir,
+            title=args.title,
+            subtitle=args.subtitle,
+            github_repo=args.github_repo,
+            website=args.website,
+            template=args.template,
+            categories=args.category,
+            include_zh=not args.no_zh,
+            branding=not args.no_branding,
+            embed_tables=args.tables,
+            force=args.force,
+        )
+    except (FileExistsError, ValueError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    for path in created:
+        status(f"created {path}")
+    print(f"\nScaffolded {len(created)} files. Next: edit config.json, then add papers with"
+          " 'awescholar updater add --archive docs/data.json'.")
+
+
+def cmd_counts(args: argparse.Namespace, config: dict) -> int | None:
+    from .readme import update_readme_counts
+
+    readme_paths = args.readme or []
+    if not readme_paths:
+        seen: set[str] = set()
+        for candidate in ("readme.md", "README.zh-CN.md", "README.md"):
+            # case-insensitive filesystems make README.md match an existing readme.md
+            if os.path.exists(candidate) and candidate.lower() not in seen:
+                seen.add(candidate.lower())
+                readme_paths.append(candidate)
+    if not readme_paths:
+        print("Error: no readme.md/README.md found in the current directory (use --readme)")
+        return 1
+
+    for readme_path in readme_paths:
+        update_readme_counts(archive_path=args.archive, readme_path=readme_path)
+        print(f"README counts refreshed at {readme_path}")
+
+
 # ── Main ─────────────────────────────────────────────────────
 
 def main() -> int:
@@ -317,6 +363,29 @@ def main() -> int:
     p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")
     p.add_argument("--no-backup", action="store_true", help="Do not create a backup of the archive before updating")
 
+    p = updater_sub.add_parser("counts", help="Refresh website-first README paper counts from project data JSON")
+    p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")
+    p.add_argument("--readme", action="append",
+                   help="README path, repeatable (default: readme.md + README.zh-CN.md in cwd)")
+
+    # init
+    p = sub.add_parser("init", help="Scaffold a new curated paper-list repository")
+    p.add_argument("target_dir", type=str, nargs="?", default=".",
+                   help="Target directory (default: current directory)")
+    p.add_argument("--title", type=str, help="Project title (default: Awesome AI Meets Biology)")
+    p.add_argument("--subtitle", type=str, help="Short description used in header, site tagline, and meta")
+    p.add_argument("--github-repo", type=str, help="owner/repo for badges and links")
+    p.add_argument("--website", type=str, help="Website URL (custom domain writes docs/CNAME)")
+    p.add_argument("--template", choices=["bio", "vt"], default="bio",
+                   help="Website template: bio = Awesome-AI-Meets-Biology style, vt = Awesome-AI-Virtual-Tumor style")
+    p.add_argument("--category", action="append", dest="category",
+                   help="Category name (repeatable; default: the five Biology categories)")
+    p.add_argument("--no-zh", action="store_true", help="Skip README.zh-CN.md")
+    p.add_argument("--no-branding", action="store_true", help="Skip ecosystem/support sections and Webioinfo links")
+    p.add_argument("--tables", action="store_true",
+                   help="Also embed AWESCHOLAR table markers (classic in-README tables)")
+    p.add_argument("--force", action="store_true", help="Proceed even if the target directory is not empty")
+
     args = parser.parse_args()
     if not args.command:
         parser.print_help()
@@ -327,6 +396,9 @@ def main() -> int:
     except FileNotFoundError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
+
+    if args.command == "init":
+        return cmd_init(args, config) or 0
 
     if args.command == "crawler":
         if not args.crawler_command:
@@ -345,6 +417,7 @@ def main() -> int:
         handlers = {
             "update": cmd_update, "readme": cmd_readme, "rss": cmd_rss,
             "search": cmd_search_record, "add": cmd_add, "backfill": cmd_backfill,
+            "counts": cmd_counts,
         }
         return handlers[args.updater_command](args, config) or 0
 

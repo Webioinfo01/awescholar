@@ -3,6 +3,7 @@
 import glob
 import json
 import os
+import re
 import shutil
 from datetime import datetime
 
@@ -288,6 +289,61 @@ def update_readme(
             print(f"Created backup: {backup_path}")
         except Exception as e:  # noqa: BLE001 — backup failure must not abort the README update
             print(f"Warning: Could not create backup of {readme_path}: {e}")
+
+    with open(readme_path, "w", encoding="utf-8") as f:
+        f.write(content)
+
+    return readme_path
+
+
+def update_readme_counts(archive_path: str, readme_path: str) -> str:
+    """Refresh paper counts in a website-first README from the project data JSON.
+
+    Updates the papers badge, the per-category counts on "Browse the Collection"
+    bullets (both the short format and the description-bearing format), and the
+    total-count sentences. Lines that do not match the known patterns are left
+    untouched.
+    """
+    with open(archive_path, "r", encoding="utf-8") as f:
+        archive = json.load(f)
+
+    slug_counts: dict[str, int] = {}
+    for category, papers in archive.items():
+        if isinstance(papers, list):
+            slug = re.sub(r"[^a-z0-9]+", "-", str(category).lower()).strip("-")
+            slug_counts[slug] = slug_counts.get(slug, 0) + len(papers)
+    total = sum(slug_counts.values())
+    n_categories = len([v for v in archive.values() if isinstance(v, list)])
+
+    with open(readme_path, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    # bullets like "- 🌟 [AI Agents](http://site/#ai-agents) — 12 papers" (or "篇", optional trailing text)
+    def _bullet_repl(match: re.Match) -> str:
+        slug = match.group("slug")
+        if slug not in slug_counts:
+            return match.group(0)
+        count = slug_counts[slug]
+        if "篇" in match.group("unit"):
+            unit = " 篇"
+        else:
+            unit = " paper" if count == 1 else " papers"
+        return f"{match.group('prefix')}{count}{unit}"
+
+    content = re.sub(
+        r"(?P<prefix>^\s*-\s+.*?\[[^\]]+\]\([^)#]+#(?P<slug>[a-z0-9-]+)\)\s+—\s+)"
+        r"\d+(?P<unit>\s+(?:papers?\b|篇))",
+        _bullet_repl,
+        content,
+        flags=re.MULTILINE,
+    )
+    # totals: "All 351 papers live on", "— 351 entries with full metadata", "全部 351 篇论文都在"
+    content = re.sub(r"\bAll \d+ papers live on\b", f"All {total} papers live on", content)
+    content = re.sub(r"— \d+ entries with full metadata", f"— {total} entries with full metadata", content)
+    content = re.sub(r"全部 \d+ 篇论文都在", f"全部 {total} 篇论文都在", content)
+    # badges: papers-N (optionally with %2B), categories-N
+    content = re.sub(r"papers-\d+(?:%2B)?", f"papers-{total}", content)
+    content = re.sub(r"categories-\d+", f"categories-{n_categories}", content)
 
     with open(readme_path, "w", encoding="utf-8") as f:
         f.write(content)

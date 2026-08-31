@@ -1,0 +1,61 @@
+<div align="center">
+  <h1>{{TITLE}}{{AWESKILL_BADGE}}</h1>
+  <p><strong>{{SUBTITLE}}.</strong></p>
+  <p>Paper discovery, annotation, and filtering powered by <a href="https://github.com/Webioinfo01/awescholar">awescholar</a>. Skill management via <a href="https://aweskill.webioinfo.top/">aweskill</a>.</p>
+  <p>
+{{NAV_LINKS}}
+  </p>
+  <p>
+    <a href="{{WEBSITE}}"><img src="https://img.shields.io/website?url={{WEBSITE_ENCODED}}&style=flat-square" alt="Website"></a>
+    <a href="{{GITHUB_REPO_URL}}"><img src="https://img.shields.io/github/stars/{{GITHUB_REPO_PATH}}?style=social" alt="GitHub Stars"></a>
+    <a href="{{GITHUB_REPO_URL}}"><img src="https://visitor-badge.laobi.icu/badge?page_id={{GITHUB_REPO_PATH_DOT}}&style=flat-square" alt="Visitors"></a>
+  </p>
+  <p>
+    <img src="https://img.shields.io/badge/license-MPL--2.0-22C55E?style=flat-square" alt="License">
+    <img src="https://img.shields.io/badge/categories-{{N_CATEGORIES}}-7C3AED?style=flat-square" alt="Categories">
+    <img src="https://img.shields.io/badge/papers-{{TOTAL}}-0EA5E9?style=flat-square" alt="Papers">
+    <img src="https://img.shields.io/badge/updated-{{YEAR_MONTH}}-334155?style=flat-square" alt="Last updated">
+  </p>
+</div>
+
+> Visit the official website at: {{WEBSITE}}
+
+This project is collaboratively maintained by our self-developed AI agent and human experts in a human-in-the-loop workflow, combining automated discovery with expert curation. Paper discovery, annotation, and filtering are powered by [awescholar](https://github.com/Webioinfo01/awescholar) — an AI-agent-operable scientific literature curator.
+
+{{CATEGORIES_SENTENCE}}
+
+## 📋 Table of Contents
+- [🌐 Browse the Collection](#browse-the-collection)
+- [Contributing](#contributing)
+- [Citation](#citation)
+
+## 🌐 Browse the Collection
+
+All {{TOTAL}} papers live on the [website]({{WEBSITE}}) — with instant search across papers, teams, domains and venues, category tabs, and per-year statistics:
+
+**→ {{WEBSITE}}**
+
+{{CATEGORY_BULLETS}}
+
+Machine-readable data: [`docs/data.json`](docs/data.json) — {{TOTAL}} entries with full metadata (team, affiliation, venue, code links).
+{{TABLES_BLOCK}}
+{{BRANDING_SECTIONS}}## Contributing
+
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for instructions on how to add new entries.
+
+## License
+
+This project is licensed under the Mozilla Public License 2.0 - see the [LICENSE](LICENSE) file for details.
+
+## Citation
+
+If you find this repository useful in your research, please consider citing:
+
+```bibtex
+@misc{{{BIBTEX_KEY}},
+  title={{{TITLE}}},
+  author={{{AUTHOR}}},
+  year={{{YEAR}}},
+  url={{{GITHUB_REPO_URL}}}
+}
+```
