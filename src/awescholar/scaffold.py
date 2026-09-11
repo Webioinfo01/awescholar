@@ -3,7 +3,7 @@
 import json
 import os
 import re
-from datetime import datetime
+from datetime import UTC, datetime
 from importlib.resources import files
 from urllib.parse import urlparse
 
@@ -260,7 +260,7 @@ def run_init(
 
     owner = github_repo.split("/")[0]
     github_url = f"https://github.com/{github_repo}"
-    now = datetime.now()
+    now = datetime.now(UTC)
     counts = {name: [] for name in categories}
     total = sum(len(papers) for papers in counts.values())
 

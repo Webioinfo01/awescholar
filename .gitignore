@@ -11,3 +11,4 @@ build/
 output/
 .Rhistory
 /.zcode
+*.pyc
