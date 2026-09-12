@@ -23,6 +23,11 @@ Match the user's intent to a task domain, then follow the workflow below.
 | "Generate RSS feed" | Updater RSS | `awescholar updater rss --archive data.json` |
 | "Add a paper by title/DOI search" | Updater Search | `awescholar updater search --json-file papers.json` |
 | "Manually add a paper record" | Updater Add | `awescholar updater add --archive data.json` |
+| "What's in my archive about X", "search my curated papers" | Reader Query | `awescholar reader query --archive docs/data.json "X" --json` |
+| "Papers related to this one", pasted abstract/DOI/title | Reader Related | `awescholar reader related --archive docs/data.json --doi X --json` |
+| "Must-read papers for my field", "reading list", "入门必读" | Reader Recommend | `awescholar reader recommend --archive docs/data.json --field "X" --top 10` |
+| "Archive stats", "how many papers do I have" | Reader Stats | `awescholar reader stats --archive docs/data.json` |
+| "Resolve held-back duplicates", "处理重复论文" | Updater Dedupe | `awescholar updater dedupe --review output/dedupe_review.json --archive docs/data.json --keep newer` |
 
 ## First-Time Setup
 
@@ -38,6 +43,7 @@ Match the user's intent to a task domain, then follow the workflow below.
 3. Updater commands operate on the **project data JSON** (long-lived curated file, e.g. `docs/data.json`). Do not confuse with pipeline intermediates (`updater.json`, `updater_filter.json`).
 4. For `updater search`: use `--json-file` to save results for review first, then `updater update --direction new2old` to merge. Use `--archive` only when you want to write directly.
 5. For `updater readme`: default behavior creates a timestamped `.bak` backup. Use `--no-backup` to skip.
+6. `reader` commands are read-only: they never modify the archive and need no `--config` (only `recommend --llm` does). Prefer `--json` when consuming programmatically, and answer the user following Response Format.
 
 ## Workflows
 
@@ -95,6 +101,8 @@ awescholar updater update --direction new2old --input output/updater_filter.json
 awescholar updater update --direction old2new --input output/updater_filter.json --archive docs/data.json
 ```
 
+Near-duplicates (title similarity ≥ 0.90, or ≥ 0.80 with a shared author) are held back instead of merged — see Updater Dedupe below.
+
 Decision order:
 1. Review `updater_filter.json` before merging — confirm content is appropriate.
 2. `new2old` when new papers should be added to the curated collection.
@@ -142,6 +150,34 @@ Workflow for reviewed search:
 2. Review and edit `papers.json` as needed
 3. `updater update --direction new2old --input papers.json --archive docs/data.json` — merge when ready
 
+### Reader (Query · Related · Recommend · Stats)
+
+Use when answering questions **about** the curated archive — the reader face. Read-only, offline, no `--config` needed (except `recommend --llm`). Never use these to modify data; if the user wants to add papers, switch to Updater Search.
+
+```bash
+# Keyword search over title/domain/abstract/venue/team
+awescholar reader query --archive docs/data.json "single cell perturbation"
+awescholar reader query --archive docs/data.json "LLM agent" --category "AI Agents" --top 5 --json
+
+# Papers related to a seed: --doi (must be in archive), --title (external ok),
+# or --input seed.json (exactly one record — write the pasted abstract here)
+awescholar reader related --archive docs/data.json --doi 10.48550/arXiv.2505.23055
+awescholar reader related --archive docs/data.json --input seed.json --top 5 --json
+
+# Must-read ranking for a field. Offline by default; --llm adds model-ranked
+# reasons (needs --config)
+awescholar reader recommend --archive docs/data.json --field "AI for protein design" --top 10
+awescholar --config config.json reader recommend --archive docs/data.json --field "..." --llm --json
+
+# Archive statistics
+awescholar reader stats --archive docs/data.json --json
+```
+
+Paper-to-precedents flow (user pastes an abstract):
+1. Write the pasted text to a temp file as `{"title": "...", "abstract": "..."}`.
+2. `awescholar reader related --archive docs/data.json --input <temp> --top 5 --json`.
+3. Answer following Response Format; offer `updater search` for papers worth adding.
+
 ### Updater README
 
 Use when regenerating the README table from the project data JSON.
@@ -176,6 +212,35 @@ Use when generating an RSS feed from the project data JSON.
 awescholar updater rss --archive docs/data.json -o docs/rss.xml
 awescholar updater rss --archive docs/data.json -o docs/rss.xml --title "Paper Updates"
 ```
+
+### Updater Dedupe
+
+Use when `updater update` reports possible duplicates held back. A held-back pair means a new paper's title nearly matches an archive entry but dodged the exact DOI/title match — the classic preprint-vs-published signature. Pairs land in `dedupe_review.json` next to the `--input` file; nothing is merged until resolved.
+
+```bash
+# After: "Merged : N added · M possible duplicates held back"
+awescholar updater dedupe --review output/dedupe_review.json --archive docs/data.json --keep published
+```
+
+Decision order:
+1. `--keep published` — the non-preprint version wins and overwrites in place (default choice for preprint/published pairs).
+2. `--keep newer` — later `year` wins.
+3. `--keep both` — rare: keep two entries when they are genuinely distinct papers.
+4. Use `updater update --no-dedupe` only when the user explicitly wants everything appended blindly.
+
+## Response Format (reader intents)
+
+When answering a user from reader results, keep the structure stable across sessions and agents:
+
+1. Open with one line: N in-archive hits (+ M outside suggestions, if you also searched the web/Semantic Scholar).
+2. At most 5 in-archive picks, relevance-ordered. Per paper:
+   - **Title** (year · category)
+   - one-sentence contribution — what the paper does
+   - why it fits THIS user — tie it to their stated field/question; reuse `reason_for_inclusion` when present
+   - link (`paperUrl` or DOI)
+3. Keep in-archive and outside results in separate groups; never mix them.
+4. Close with: `Archive has N papers across M categories — dig deeper with: awescholar reader query "<keywords>".`
+5. Answer only the question asked. If the user wants to add a paper to the archive, say so and route to Updater Search — do not merge anything silently.
 
 ## Config Reference
 

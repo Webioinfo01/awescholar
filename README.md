@@ -66,6 +66,8 @@ Install the awescholar skill (see [Install](#install)), then just tell your agen
 - Run the full discovery pipeline: search, annotate, filter, report — in one command
 - Merge new results into the project data JSON and regenerate the README
 - Search Semantic Scholar by title or DOI and add papers to the archive
+- Answer reader questions from the archive without touching it: keyword search, related work for a pasted abstract, must-read lists per field (`reader query / related / recommend`)
+- Resolve suspected preprint/published duplicates held back during merge
 - Generate RSS feeds for curated collections
 - Re-run any pipeline step independently with custom input
 
@@ -204,7 +206,9 @@ awescholar crawler report updater_filter.json -o report.md  # Report from custom
 awescholar crawler run ["query"]                      # Full pipeline (query optional if set in config)
 
 # Archive management
-awescholar updater update --direction new2old --input X --archive data.json  # Merge to project data JSON
+awescholar updater update --direction new2old --input X --archive data.json  # Merge (suspected duplicates held back)
+awescholar updater update --direction new2old --input X --archive data.json --no-dedupe  # Merge everything, skip duplicate detection
+awescholar updater dedupe --review output/dedupe_review.json --archive data.json --keep published  # Resolve held-back pairs
 awescholar updater readme --archive data.json         # Generate README tables (with .bak backup)
 awescholar updater readme --archive data.json --no-backup  # Generate README without backup
 awescholar updater counts --archive data.json         # Refresh website-first README paper counts
@@ -215,9 +219,19 @@ awescholar updater search --archive data.json --category "AI Agents"  # Add to a
 awescholar updater search --archive data.json --by doi 10.1038/s41467-025-59628-y  # Non-interactive: DOIs as arguments
 awescholar updater add --archive data.json            # Interactively add a record to project data JSON
 awescholar updater backfill --archive data.json       # Fill missing affiliation/team fields (Semantic Scholar + Crossref + OpenAlex)
+
+# Read-only archive queries (reader) — no config needed, never modify data
+awescholar reader query --archive data.json "single cell perturbation"   # Keyword search over the archive
+awescholar reader query --archive data.json "LLM agent" --category "AI Agents" --top 5 --json
+awescholar reader related --archive data.json --doi 10.1/x   # Papers related to one seed (in-archive or external)
+awescholar reader recommend --archive data.json --field "AI for biology" --top 10   # Must-read ranking (offline)
+awescholar --config config.json reader recommend --archive data.json --field "..." --llm   # LLM-ranked with reasons
+awescholar reader stats --archive data.json           # Archive statistics
 ```
 
 Each subcommand accepts `--input` (or positional `input` for report) to read from a specific file instead of the default path. This lets you re-run any step independently without re-running the full pipeline.
+
+`reader` commands are the read-only face of the curated archive: keyword search (`query`), find related work for a seed paper — including one pasted from outside the archive via `--input` (`related`), must-read ranking per research field (`recommend`, offline or `--llm`), and archive statistics (`stats`). They never modify data and need no config, so an AI agent can answer "what's in my archive about X" instantly. During `updater update`, papers whose titles near-match an existing entry (the preprint-vs-published signature) are held back into `dedupe_review.json` next to the input file instead of being merged; resolve them with `updater dedupe --keep newer|published|both`, or bypass detection with `--no-dedupe`.
 
 `updater readme` updates only the generated region between `<!-- AWESCHOLAR:START -->` and `<!-- AWESCHOLAR:END -->`. That generated region contains the awescholar table of contents and category tables. Keep custom headings, citation, and project text outside that region. Existing README files without those markers are rejected instead of being overwritten. If the README does not exist yet, `--title` controls the generated top-level heading.
 
@@ -256,7 +270,7 @@ crawler search -> crawler annotate -> crawler filter -> crawler report
                                                                     data.json
 ```
 
-Each step produces a JSON intermediate file. You can re-run any step independently.
+Each step produces a JSON intermediate file. You can re-run any step independently. `data.json` also feeds the read-only `reader` commands (query / related / recommend / stats) — the daily-use query face on top of the monthly curation pipeline.
 
 ## Awesome Ecosystem
 

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- New `reader` command group gives the curated archive a read-only query face: `reader query` (keyword search over title/domain/abstract/venue/team with weighted scoring), `reader related` (find in-archive neighbors of a seed paper — by `--doi`, `--title`, or a pasted record via `--input`), `reader recommend` (must-read ranking per research field; offline category routing by default, `--llm` adds model-ranked one-line reasons), and `reader stats`. All reader commands are offline, never modify data, and need no config — `--json` serves agent consumption
+- `updater update` now holds back suspected duplicates before merging: entries whose normalized-title similarity to an archive entry is ≥ 0.90 (or ≥ 0.80 with a shared author token) but that dodge the exact DOI/title match — the preprint-vs-published signature — land in `dedupe_review.json` next to the input file instead of being appended; `--no-dedupe` restores the old append-everything behavior
+- New `updater dedupe --review <file> --archive <data.json> --keep newer|published|both` resolves held-back pairs: the winner's non-empty fields overwrite in place (or both entries are kept); the review file always mirrors the latest merge and is removed once applied
+- SKILL.md ships the reader intents in its router plus a Response Format contract for reader answers (in-archive/outside groups, ≤5 picks with contribution + fit + link, closing archive stats line), and documents the dedupe workflow
 - `updater search` now accepts paper titles/DOIs as positional arguments for non-interactive use (`awescholar updater search --archive data.json --by doi <doi1> <doi2>`); omitting them keeps the previous interactive prompt
 
 ## v0.2.0

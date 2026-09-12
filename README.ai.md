@@ -179,6 +179,8 @@ After setup, the agent needs to be restarted to pick up the new skill. Tell the 
 > - "Search for recent papers about AI agents in biology."
 > - "Run the full awescholar pipeline with my config."
 > - "Merge new results into the project data JSON and update the README."
+> - "What's in my archive about single-cell perturbation?"
+> - "I just read this abstract — which curated papers are related?"
 
 If the user is speaking Chinese, use this version instead:
 
@@ -187,6 +189,8 @@ If the user is speaking Chinese, use this version instead:
 > - "搜索最近关于 AI agents in biology 的论文。"
 > - "用我的 config 跑一遍 awescholar 完整流水线。"
 > - "把新结果合并到项目数据 JSON 里，更新 README。"
+> - "我的库里有哪些关于单细胞扰动预测的论文？"
+> - "我刚读了这篇摘要，库里有哪些相关论文？"
 
 ## Safety Rules
 

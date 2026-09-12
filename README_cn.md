@@ -204,7 +204,9 @@ awescholar crawler report updater_filter.json -o report.md  # 从自定义 JSON 
 awescholar crawler run ["query"]                      # 完整流水线（如 config 已设 query 则可省略）
 
 # 存档管理
-awescholar updater update --direction new2old --input X --archive data.json  # 合并到项目数据 JSON
+awescholar updater update --direction new2old --input X --archive data.json  # 合并到项目数据 JSON（疑似重复会被拦下）
+awescholar updater update --direction new2old --input X --archive data.json --no-dedupe  # 全部合入，跳过重复检测
+awescholar updater dedupe --review output/dedupe_review.json --archive data.json --keep published  # 处理被拦下的重复对
 awescholar updater readme --archive data.json         # 生成 README 表格（自动备份）
 awescholar updater readme --archive data.json --no-backup  # 生成 README 不备份
 awescholar updater counts --archive data.json         # 刷新 website-first README 的论文计数
@@ -212,9 +214,19 @@ awescholar updater rss --archive data.json            # 生成 RSS 订阅
 awescholar updater search --json-file papers.json --by title   # 搜索并保存待审阅
 awescholar updater search --archive data.json --by title       # 搜索并直接添加
 awescholar updater add --archive data.json            # 交互式添加单条记录到项目数据 JSON
+
+# 只读查询（reader）——无需 config，绝不修改数据
+awescholar reader query --archive data.json "single cell perturbation"   # 库内关键词检索
+awescholar reader query --archive data.json "LLM agent" --category "AI Agents" --top 5 --json
+awescholar reader related --archive data.json --doi 10.1/x   # 与某篇种子论文相关的库内论文（外部论文可用 --input）
+awescholar reader recommend --archive data.json --field "AI for biology" --top 10   # 领域必读排名（离线）
+awescholar --config config.json reader recommend --archive data.json --field "..." --llm   # LLM 排名并给出理由
+awescholar reader stats --archive data.json           # 存档统计
 ```
 
 每个子命令都支持 `--input`（report 用位置参数）指定输入文件，无需重跑完整流水线即可独立执行任意步骤。
+
+`reader` 命令是策展存档的只读查询面：关键词检索（`query`）、为种子论文找相关工作（`related`，支持 `--input` 喂入粘贴的摘要）、按研究领域生成必读清单（`recommend`，离线或 `--llm`）、存档统计（`stats`）。它们不修改数据、不需要 config，AI agent 可以即时回答"我的库里有哪些关于 X 的论文"。`updater update` 合并时，标题与库内已有条目高度相似的论文（预印本/正式版的典型特征）会被拦到输入文件旁的 `dedupe_review.json`，用 `updater dedupe --keep newer|published|both` 处理，`--no-dedupe` 可跳过检测。
 
 `updater readme` 只更新 `<!-- AWESCHOLAR:START -->` 和 `<!-- AWESCHOLAR:END -->` 之间的自动生成区域。这个区域包含 awescholar 生成的目录和分类表格。自定义标题、引用和项目介绍应放在 marker 外。已有 README 如果没有这些 marker，会直接报错，避免整文件覆盖。如果 README 还不存在，`--title` 用来控制生成文件的一级标题。
 

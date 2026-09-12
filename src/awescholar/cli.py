@@ -164,7 +164,7 @@ def cmd_run(args: argparse.Namespace, config: dict) -> int | None:
 
 
 def cmd_update(args: argparse.Namespace, config: dict) -> int | None:
-    from .archive import merge_archive_to_new, merge_new_to_archive
+    from .archive import DEFAULT_REVIEW_FILENAME, merge_archive_to_new, merge_new_to_archive
 
     new_path = args.input or os.path.join(config["db_path"], "updater_filter.json")
     if not os.path.exists(new_path):
@@ -172,11 +172,44 @@ def cmd_update(args: argparse.Namespace, config: dict) -> int | None:
         return 1
 
     if args.direction == "new2old":
-        merge_new_to_archive(new_path, args.archive)
-        print(f"Merged new papers into {args.archive}")
+        before = _count_papers(args.archive)
+        merge_new_to_archive(new_path, args.archive, dedupe=not args.no_dedupe)
+        added = _count_papers(args.archive) - before
+        review_path = os.path.join(os.path.dirname(new_path) or ".", DEFAULT_REVIEW_FILENAME)
+        if not args.no_dedupe and os.path.exists(review_path):
+            with open(review_path, "r", encoding="utf-8") as f:
+                held = len(json.load(f))
+            print(f"Merged  : {added} added · {held} possible duplicates held back")
+            print(f"Review  : {review_path}")
+            print(f"Resolve : awescholar updater dedupe --review {review_path} "
+                  f"--archive {args.archive} --keep newer|published|both")
+        else:
+            print(f"Merged {added} papers into {args.archive}")
     elif args.direction == "old2new":
         merge_archive_to_new(new_path, args.archive)
         print(f"Enriched {new_path} with archive papers")
+
+
+def _count_papers(archive_path: str) -> int:
+    if not os.path.exists(archive_path):
+        return 0
+    with open(archive_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    return sum(len(v) for v in data.values() if isinstance(v, list))
+
+
+def cmd_dedupe(args: argparse.Namespace, config: dict) -> int | None:
+    from .archive import apply_dedupe_review
+
+    if not os.path.exists(args.review):
+        print(f"Not found: {args.review}. Held-back duplicates appear here after "
+              "'updater update --direction new2old'.")
+        return 1
+    applied = apply_dedupe_review(args.review, args.archive, keep=args.keep)
+    for item in applied:
+        title = str(item.get("incoming", {}).get("title") or "")[:60]
+        print(f"  [{item.get('title_similarity', 0):.2f}] {item['resolution']}: {title}")
+    print(f"\nResolved {len(applied)} pair(s) in {args.archive}; removed {args.review}")
 
 
 def cmd_readme(args: argparse.Namespace, config: dict) -> int | None:
@@ -239,6 +272,41 @@ def cmd_add(args: argparse.Namespace, config: dict) -> int | None:
     from .record import add_interactive
 
     add_interactive(archive_path=args.archive, categories=config.get("categories"))
+
+
+# ── Reader (read-only archive queries) ───────────────────────
+
+def cmd_reader_query(args: argparse.Namespace, config: dict) -> int | None:
+    from .reader import run_query
+
+    run_query(args.archive, args.query, top=args.top, category=args.category,
+              as_json=args.json)
+
+
+def cmd_reader_related(args: argparse.Namespace, config: dict) -> int | None:
+    from .reader import load_seed, run_related
+
+    seed = load_seed(args.archive, doi=args.doi, title=args.title, input_path=args.input)
+    run_related(args.archive, seed, top=args.top, as_json=args.json)
+
+
+def cmd_reader_recommend(args: argparse.Namespace, config: dict) -> int | None:
+    from .reader import run_recommend
+
+    model = api_key = base_url = None
+    if args.llm:
+        model, api_key, base_url = resolve_agent_config(config, "recommender")
+        if not api_key:
+            print("Error: --llm needs a model API key (set --config or AWESCHOLAR_API_KEY).")
+            return 1
+    run_recommend(args.archive, args.field, top=args.top, as_json=args.json, llm=args.llm,
+                  model=model or "", api_key=api_key, base_url=base_url, status_cb=status)
+
+
+def cmd_reader_stats(args: argparse.Namespace, config: dict) -> int | None:
+    from .reader import run_stats
+
+    run_stats(args.archive, as_json=args.json)
 
 
 def _bind_preview_server(docs_dir: str, port: int):
@@ -367,6 +435,16 @@ def main() -> int:
     p.add_argument("--direction", choices=["new2old", "old2new"], required=True)
     p.add_argument("--input", type=str, help="Path to new data JSON")
     p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")
+    p.add_argument("--no-dedupe", action="store_true",
+                   help="Append everything; skip near-duplicate detection "
+                        "(preprint/published pairs would both be added)")
+
+    p = updater_sub.add_parser("dedupe", help="Resolve held-back duplicate pairs from a dedupe review file")
+    p.add_argument("--review", type=str, required=True,
+                   help="Path to dedupe_review.json written by 'updater update'")
+    p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")
+    p.add_argument("--keep", choices=["newer", "published", "both"], required=True,
+                   help="newer: latest year wins · published: non-preprint wins · both: keep two entries")
 
     p = updater_sub.add_parser("readme", help="Generate README tables from project data JSON")
     p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")
@@ -401,6 +479,37 @@ def main() -> int:
     p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")
     p.add_argument("--readme", action="append",
                    help="README path, repeatable (default: readme.md + README.zh-CN.md in cwd)")
+
+    # reader
+    reader = sub.add_parser("reader", help="Read-only queries over the project data JSON")
+    reader_sub = reader.add_subparsers(dest="reader_command")
+
+    p = reader_sub.add_parser("query", help="Search the archive by keywords (offline)")
+    p.add_argument("query", type=str, help="Keyword query over title/domain/abstract/venue/team")
+    p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")
+    p.add_argument("--top", type=int, default=10, help="Max hits (default: 10)")
+    p.add_argument("--category", type=str, help="Restrict to one category")
+    p.add_argument("--json", action="store_true", help="Machine-readable output for agents")
+
+    p = reader_sub.add_parser("related", help="Find archive papers related to a seed paper")
+    p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")
+    p.add_argument("--doi", type=str, help="Seed DOI (must exist in the archive)")
+    p.add_argument("--title", type=str, help="Seed title (external titles are fine)")
+    p.add_argument("--input", type=str, help="Path to a JSON file with exactly one paper record")
+    p.add_argument("--top", type=int, default=5, help="Max hits (default: 5)")
+    p.add_argument("--json", action="store_true", help="Machine-readable output for agents")
+
+    p = reader_sub.add_parser("recommend", help="Recommend must-read papers for a research field")
+    p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")
+    p.add_argument("--field", type=str, required=True, help="Research field or interests")
+    p.add_argument("--top", type=int, default=10, help="Picks to return (default: 10)")
+    p.add_argument("--llm", action="store_true",
+                   help="Rank candidates with the configured LLM (needs --config)")
+    p.add_argument("--json", action="store_true", help="Machine-readable output for agents")
+
+    p = reader_sub.add_parser("stats", help="Archive statistics: counts, categories, date range")
+    p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")
+    p.add_argument("--json", action="store_true", help="Machine-readable output for agents")
 
     # init
     p = sub.add_parser("init", help="Scaffold a new curated paper-list repository")
@@ -455,9 +564,23 @@ def main() -> int:
         handlers = {
             "update": cmd_update, "readme": cmd_readme, "rss": cmd_rss,
             "search": cmd_search_record, "add": cmd_add, "backfill": cmd_backfill,
-            "counts": cmd_counts,
+            "counts": cmd_counts, "dedupe": cmd_dedupe,
         }
         return handlers[args.updater_command](args, config) or 0
+
+    if args.command == "reader":
+        if not args.reader_command:
+            reader.print_help()
+            return 0
+        try:
+            handlers = {
+                "query": cmd_reader_query, "related": cmd_reader_related,
+                "recommend": cmd_reader_recommend, "stats": cmd_reader_stats,
+            }
+            return handlers[args.reader_command](args, config) or 0
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
 
 
 if __name__ == "__main__":
