@@ -59,6 +59,28 @@ def _install(monkeypatch, papers, author_details):
     monkeypatch.setattr(search, "SemanticScholar", lambda api_key=None: fake)
 
 
+def test_search_papers_falls_back_to_env_key_and_warns_when_missing(tmp_path, monkeypatch, capsys):
+    captured = {}
+
+    def install(api_key=None):
+        captured["api_key"] = api_key
+        return FakeScholar([], {})
+
+    monkeypatch.setattr(search, "SemanticScholar", install)
+    monkeypatch.setattr(search, "ss_env_api_key", lambda: "env-key")
+
+    search.search_papers("query", db_path=str(tmp_path))
+
+    assert captured["api_key"] == "env-key"
+    assert capsys.readouterr().err == ""
+
+    monkeypatch.setattr(search, "ss_env_api_key", lambda: None)
+    search.search_papers("query", db_path=str(tmp_path))
+
+    assert captured["api_key"] is None
+    assert "no Semantic Scholar API key" in capsys.readouterr().err
+
+
 def test_search_papers_stores_author_affiliations(tmp_path, monkeypatch):
     paper = FakePaper(
         doi="10.1/a",

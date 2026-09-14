@@ -11,7 +11,12 @@ from pathlib import Path
 import pytest
 
 from awescholar import __version__
-from awescholar.config import load_config, resolve_agent_config, ss_env_api_key
+from awescholar.config import (
+    load_config,
+    resolve_agent_config,
+    ss_env_api_key,
+    warn_missing_ss_key,
+)
 
 
 def test_load_config_defaults_data_json_path_to_none():
@@ -178,3 +183,12 @@ def test_version_constant_matches_package_metadata():
     metadata = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
 
     assert __version__ == metadata["project"]["version"]
+
+
+def test_warn_missing_ss_key_writes_actionable_hint_to_stderr(capsys):
+    warn_missing_ss_key()
+
+    err = capsys.readouterr().err
+    assert "no Semantic Scholar API key" in err
+    assert "anonymous free tier" in err
+    assert "SEMANTIC_SCHOLAR_API_KEY" in err

@@ -95,7 +95,7 @@ awescholar --config config.json crawler run
 awescholar --config config.json crawler run "perturbation prediction|single cell" --date 2025-01-01:2025-05-30
 ```
 
-The Semantic Scholar API key is resolved in this order: `--ss-api-key` CLI flag > `semantic_scholar.api_key` in config.json > `SEMANTIC_SCHOLAR_API_KEY` (or legacy `SEMANTICSCHOLAR_API_KEY`) environment variable.
+The Semantic Scholar API key is resolved in this order: `--ss-api-key` CLI flag > `semantic_scholar.api_key` in config.json > `SEMANTIC_SCHOLAR_API_KEY` (or legacy `SEMANTICSCHOLAR_API_KEY`) environment variable. When no key is found anywhere, awescholar prints a warning to stderr and falls back to the anonymous free tier.
 
 ```bash
 awescholar --ss-api-key "your-key" crawler search "AI agent" --limit 10

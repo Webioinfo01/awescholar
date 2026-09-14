@@ -3,6 +3,7 @@
 import json
 import os
 import re
+import sys
 from pathlib import Path
 
 from dotenv import find_dotenv, load_dotenv
@@ -22,6 +23,15 @@ def ss_env_api_key() -> str | None:
     SEMANTICSCHOLAR_API_KEY is kept for backward compatibility.
     """
     return os.getenv("SEMANTIC_SCHOLAR_API_KEY") or os.getenv("SEMANTICSCHOLAR_API_KEY")
+
+
+def warn_missing_ss_key() -> None:
+    """Warn on stderr when no Semantic Scholar API key could be resolved."""
+    print(
+        "Warning: no Semantic Scholar API key found — using anonymous free tier. "
+        "Set SEMANTIC_SCHOLAR_API_KEY, add ~/.config/awescholar/.env, or pass --ss-api-key.",
+        file=sys.stderr,
+    )
 
 
 def _expand_env_vars(value):

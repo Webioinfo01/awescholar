@@ -93,7 +93,7 @@ awescholar --config config.json crawler run
 awescholar --config config.json crawler run "perturbation prediction|single cell" --date 2025-01-01:2025-05-30
 ```
 
-Semantic Scholar API key 按以下顺序读取：`--ss-api-key` 命令行参数 > config.json 中的 `semantic_scholar.api_key` > 环境变量 `SEMANTIC_SCHOLAR_API_KEY`（兼容旧名 `SEMANTICSCHOLAR_API_KEY`）。
+Semantic Scholar API key 按以下顺序读取：`--ss-api-key` 命令行参数 > config.json 中的 `semantic_scholar.api_key` > 环境变量 `SEMANTIC_SCHOLAR_API_KEY`（兼容旧名 `SEMANTICSCHOLAR_API_KEY`）。 任何地方都找不到 key 时，awescholar 会向 stderr 输出警告并回退到匿名免费 tier。
 
 ```bash
 awescholar --ss-api-key "your-key" crawler search "AI agent" --limit 10

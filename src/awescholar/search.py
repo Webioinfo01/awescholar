@@ -5,6 +5,7 @@ import sys
 
 from semanticscholar import SemanticScholar
 
+from .config import ss_env_api_key, warn_missing_ss_key
 from .db import Paper, get_session
 
 
@@ -37,6 +38,9 @@ def search_papers(
             "fieldsOfStudy", "isOpenAccess", "openAccessPdf", "tldr",
         ]
 
+    api_key = api_key or ss_env_api_key()
+    if not api_key:
+        warn_missing_ss_key()
     sch = SemanticScholar(api_key=api_key) if api_key else SemanticScholar()
 
     try:
