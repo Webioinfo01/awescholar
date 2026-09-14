@@ -1,11 +1,16 @@
 # Changelog
 
-## Unreleased
+## v0.2.1
 
-- New `reader` command group gives the curated archive a read-only query face: `reader query` (keyword search over title/domain/abstract/venue/team with weighted scoring), `reader related` (find in-archive neighbors of a seed paper — by `--doi`, `--title`, or a pasted record via `--input`), `reader recommend` (must-read ranking per research field; offline category routing by default, `--llm` adds model-ranked one-line reasons), and `reader stats`. All reader commands are offline, never modify data, and need no config — `--json` serves agent consumption
-- `updater update` now holds back suspected duplicates before merging: entries whose normalized-title similarity to an archive entry is ≥ 0.90 (or ≥ 0.80 with a shared author token) but that dodge the exact DOI/title match — the preprint-vs-published signature — land in `dedupe_review.json` next to the input file instead of being appended; `--no-dedupe` restores the old append-everything behavior
-- New `updater dedupe --review <file> --archive <data.json> --keep newer|published|both` resolves held-back pairs: the winner's non-empty fields overwrite in place (or both entries are kept); the review file always mirrors the latest merge and is removed once applied
-- SKILL.md ships the reader intents in its router plus a Response Format contract for reader answers (in-archive/outside groups, ≤5 picks with contribution + fit + link, closing archive stats line), and documents the dedupe workflow
+Repository-scaffolding, read-only query, and duplicate-review release — `awescholar init` generates a complete website-first curated list, a new `reader` group gives the archive a query/recommend face, and `updater` holds back suspected preprint-vs-published duplicates for explicit review.
+
+### Highlights
+
+- New `awescholar init` command scaffolds a complete website-first curated-repo — like Awesome-AI-Meets-Biology — in one step: bilingual landing-page READMEs, a searchable statistics website (`--template bio` or `--template vt`), an empty `docs/data.json` wired into `config.json`, an RSS feed, MPL-2.0 `LICENSE`, `CONTRIBUTING.md`, and `.gitignore`; a custom `--website` domain also writes `docs/CNAME`. After scaffolding it serves `docs/` on `127.0.0.1:8000` for local review (skip with `--no-serve`, pick a port with `--port`, auto-increment while a port is busy). New `updater counts` refreshes per-category counts, totals, and badges in website-first READMEs
+- New `reader` command group gives the curated archive a read-only query face: `reader query` (keyword search over title/domain/abstract/venue/team with weighted scoring), `reader related` (in-archive neighbors of a seed paper — by `--doi`, `--title`, or a pasted record via `--input`), `reader recommend` (must-read ranking per research field; offline by default, `--llm` adds model-ranked one-line reasons), and `reader stats`. All reader commands are offline, never modify data, and need no config — `--json` serves agent consumption. SKILL.md ships the reader intents in its router plus a response-format contract for reader answers
+- `updater update` now holds back suspected duplicates before merging: entries whose normalized-title similarity to an archive entry is ≥ 0.90 (or ≥ 0.80 with a shared author token) but that dodge the exact DOI/title match — the preprint-vs-published signature — land in `dedupe_review.json` next to the input file instead of being appended; `--no-dedupe` restores the old append-everything behavior. New `updater dedupe --review <file> --archive <data.json> --keep newer|published|both` resolves held-back pairs: the winner's non-empty fields overwrite in place (or both entries are kept), and the review file is removed once applied
+- The Semantic Scholar API key resolution order is now documented and explicit: `--ss-api-key` CLI flag > `semantic_scholar.api_key` in config.json > `SEMANTIC_SCHOLAR_API_KEY` environment variable (legacy `SEMANTICSCHOLAR_API_KEY` still honored)
+- CI and the release workflow now run a single `./verify` entry point (ruff + pytest) so the local gate matches CI exactly
 - `updater search` now accepts paper titles/DOIs as positional arguments for non-interactive use (`awescholar updater search --archive data.json --by doi <doi1> <doi2>`); omitting them keeps the previous interactive prompt
 
 ## v0.2.0
