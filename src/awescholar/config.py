@@ -3,8 +3,9 @@
 import json
 import os
 import re
+from pathlib import Path
 
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 
 
 def prefix_model(name: str | None) -> str | None:
@@ -36,9 +37,17 @@ def _expand_env_vars(value):
     return value
 
 
+def _load_dotenv_files() -> None:
+    """Load project and user dotenv files without replacing existing values."""
+    project_dotenv = find_dotenv(usecwd=True)
+    if project_dotenv:
+        load_dotenv(project_dotenv)
+    load_dotenv(Path.home() / ".config" / "awescholar" / ".env")
+
+
 def load_config(path: str | None) -> dict:
     """Load config from JSON file, expanding ${ENV_VAR} patterns."""
-    load_dotenv()
+    _load_dotenv_files()
     raw = {}
     if path:
         if not os.path.exists(path):

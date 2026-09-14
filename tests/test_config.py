@@ -83,6 +83,70 @@ def test_load_config_config_value_beats_env(monkeypatch, tmp_path):
     assert config["ss_api_key"] == "config-key"
 
 
+def test_load_config_reads_ss_api_key_from_user_dotenv(monkeypatch, tmp_path):
+    monkeypatch.delenv("SEMANTIC_SCHOLAR_API_KEY", raising=False)
+    monkeypatch.delenv("SEMANTICSCHOLAR_API_KEY", raising=False)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.chdir(tmp_path)
+    user_dotenv = tmp_path / ".config" / "awescholar" / ".env"
+    user_dotenv.parent.mkdir(parents=True)
+    user_dotenv.write_text("SEMANTIC_SCHOLAR_API_KEY=user-key\n", encoding="utf-8")
+
+    config = load_config(None)
+
+    assert config["ss_api_key"] == "user-key"
+
+
+def test_load_config_project_dotenv_beats_user_dotenv(monkeypatch, tmp_path):
+    monkeypatch.delenv("SEMANTIC_SCHOLAR_API_KEY", raising=False)
+    monkeypatch.delenv("SEMANTICSCHOLAR_API_KEY", raising=False)
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    monkeypatch.chdir(project_dir)
+    (project_dir / ".env").write_text("SEMANTIC_SCHOLAR_API_KEY=project-key\n", encoding="utf-8")
+    user_dotenv = tmp_path / "home" / ".config" / "awescholar" / ".env"
+    user_dotenv.parent.mkdir(parents=True)
+    user_dotenv.write_text("SEMANTIC_SCHOLAR_API_KEY=user-key\n", encoding="utf-8")
+
+    config = load_config(None)
+
+    assert config["ss_api_key"] == "project-key"
+
+
+def test_load_config_environment_beats_dotenv_files(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("SEMANTIC_SCHOLAR_API_KEY", "environment-key")
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text("SEMANTIC_SCHOLAR_API_KEY=project-key\n", encoding="utf-8")
+    user_dotenv = tmp_path / ".config" / "awescholar" / ".env"
+    user_dotenv.parent.mkdir(parents=True)
+    user_dotenv.write_text("SEMANTIC_SCHOLAR_API_KEY=user-key\n", encoding="utf-8")
+
+    config = load_config(None)
+
+    assert config["ss_api_key"] == "environment-key"
+
+
+def test_load_config_config_value_beats_dotenv_files(monkeypatch, tmp_path):
+    monkeypatch.delenv("SEMANTIC_SCHOLAR_API_KEY", raising=False)
+    monkeypatch.delenv("SEMANTICSCHOLAR_API_KEY", raising=False)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.chdir(tmp_path)
+    user_dotenv = tmp_path / ".config" / "awescholar" / ".env"
+    user_dotenv.parent.mkdir(parents=True)
+    user_dotenv.write_text("SEMANTIC_SCHOLAR_API_KEY=user-key\n", encoding="utf-8")
+    config_path = tmp_path / "config.json"
+    config_path.write_text(
+        json.dumps({"semantic_scholar": {"api_key": "config-key"}}),
+        encoding="utf-8",
+    )
+
+    config = load_config(str(config_path))
+
+    assert config["ss_api_key"] == "config-key"
+
+
 def test_resolve_agent_config_prefixes_agent_model_names():
     config = {
         "model": "openai/global-model",
