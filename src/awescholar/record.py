@@ -6,6 +6,7 @@ import os
 from semanticscholar import SemanticScholar
 
 from .categories import canonicalize_category
+from .config import ss_env_api_key
 from .data_fields import normalize_title
 
 FIELDS = [
@@ -15,7 +16,7 @@ FIELDS = [
 
 
 def _get_client(api_key: str | None = None) -> SemanticScholar:
-    key = api_key or os.getenv("SEMANTICSCHOLAR_API_KEY")
+    key = api_key or ss_env_api_key()
     return SemanticScholar(api_key=key) if key else SemanticScholar()
 
 

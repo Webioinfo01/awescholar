@@ -14,6 +14,15 @@ def prefix_model(name: str | None) -> str | None:
     return name
 
 
+def ss_env_api_key() -> str | None:
+    """Read the Semantic Scholar API key from the environment.
+
+    SEMANTIC_SCHOLAR_API_KEY matches the config.json placeholder convention;
+    SEMANTICSCHOLAR_API_KEY is kept for backward compatibility.
+    """
+    return os.getenv("SEMANTIC_SCHOLAR_API_KEY") or os.getenv("SEMANTICSCHOLAR_API_KEY")
+
+
 def _expand_env_vars(value):
     """Replace ${VAR} patterns with environment variable values."""
     if isinstance(value, str):
@@ -60,7 +69,7 @@ def load_config(path: str | None) -> dict:
         "base_url": base_url,
         "model_profiles": model_profiles,
         "agent_models": raw.get("agent_models"),
-        "ss_api_key": ss.get("api_key") or os.getenv("SEMANTICSCHOLAR_API_KEY"),
+        "ss_api_key": ss.get("api_key") or ss_env_api_key(),
         "search_query": search.get("query"),
         "fields_of_study": search.get("fields_of_study"),
         "publication_date": search.get("publication_date"),

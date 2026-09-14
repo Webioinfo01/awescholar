@@ -84,13 +84,19 @@ Agent 通过 [SKILL.md](resources/skills/awescholar/SKILL.md) 理解所有可用
 ```bash
 # 设置 API key（添加到 ~/.zshrc 或 ~/.bashrc 可持久保存）
 export GLM_API_KEY="sk-..."
-export SEMANTICSCHOLAR_API_KEY="your-key"   # 可选，不设则使用免费 tier
+export SEMANTIC_SCHOLAR_API_KEY="your-key"   # 可选，不设则使用免费 tier
 
 # 运行完整流水线
 awescholar --config config.json crawler run
 
 # 或直接传入搜索词
 awescholar --config config.json crawler run "perturbation prediction|single cell" --date 2025-01-01:2025-05-30
+```
+
+Semantic Scholar API key 按以下顺序读取：`--ss-api-key` 命令行参数 > config.json 中的 `semantic_scholar.api_key` > 环境变量 `SEMANTIC_SCHOLAR_API_KEY`（兼容旧名 `SEMANTICSCHOLAR_API_KEY`）。
+
+```bash
+awescholar --ss-api-key "your-key" crawler search "AI agent" --limit 10
 ```
 
 完整命令参考见下方[命令](#命令)。
@@ -117,7 +123,7 @@ awescholar --config config.json crawler run "perturbation prediction|single cell
     },
     "agent_models": null,
     "semantic_scholar": {
-        "api_key": "${SEMANTICSCHOLAR_API_KEY}"
+        "api_key": "${SEMANTIC_SCHOLAR_API_KEY}"
     },
     "search": {
         "query": "AI agent|large language model|foundation model",

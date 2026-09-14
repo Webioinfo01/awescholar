@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from awescholar import __version__
-from awescholar.config import load_config, resolve_agent_config
+from awescholar.config import load_config, resolve_agent_config, ss_env_api_key
 
 
 def test_load_config_defaults_data_json_path_to_none():
@@ -37,6 +37,50 @@ def test_load_config_fails_fast_for_missing_file(tmp_path):
 
     with pytest.raises(FileNotFoundError, match="Config file not found"):
         load_config(str(missing_path))
+
+
+def test_ss_env_api_key_prefers_underscored_name(monkeypatch):
+    monkeypatch.setenv("SEMANTIC_SCHOLAR_API_KEY", "key-with-underscore")
+    monkeypatch.setenv("SEMANTICSCHOLAR_API_KEY", "key-without-underscore")
+
+    assert ss_env_api_key() == "key-with-underscore"
+
+
+def test_ss_env_api_key_falls_back_to_legacy_name(monkeypatch):
+    monkeypatch.delenv("SEMANTIC_SCHOLAR_API_KEY", raising=False)
+    monkeypatch.setenv("SEMANTICSCHOLAR_API_KEY", "legacy-key")
+
+    assert ss_env_api_key() == "legacy-key"
+
+
+def test_ss_env_api_key_returns_none_when_unset(monkeypatch):
+    monkeypatch.delenv("SEMANTIC_SCHOLAR_API_KEY", raising=False)
+    monkeypatch.delenv("SEMANTICSCHOLAR_API_KEY", raising=False)
+
+    assert ss_env_api_key() is None
+
+
+def test_load_config_reads_ss_api_key_from_env(monkeypatch, tmp_path):
+    monkeypatch.setenv("SEMANTIC_SCHOLAR_API_KEY", "env-key")
+    config_path = tmp_path / "config.json"
+    config_path.write_text(json.dumps({}), encoding="utf-8")
+
+    config = load_config(str(config_path))
+
+    assert config["ss_api_key"] == "env-key"
+
+
+def test_load_config_config_value_beats_env(monkeypatch, tmp_path):
+    monkeypatch.setenv("SEMANTIC_SCHOLAR_API_KEY", "env-key")
+    config_path = tmp_path / "config.json"
+    config_path.write_text(
+        json.dumps({"semantic_scholar": {"api_key": "config-key"}}),
+        encoding="utf-8",
+    )
+
+    config = load_config(str(config_path))
+
+    assert config["ss_api_key"] == "config-key"
 
 
 def test_resolve_agent_config_prefixes_agent_model_names():

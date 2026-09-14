@@ -86,13 +86,19 @@ The agent uses the [SKILL.md](resources/skills/awescholar/SKILL.md) to understan
 ```bash
 # Set API keys (add to ~/.zshrc or ~/.bashrc to persist)
 export GLM_API_KEY="sk-..."
-export SEMANTICSCHOLAR_API_KEY="your-key"   # optional, without it uses free tier
+export SEMANTIC_SCHOLAR_API_KEY="your-key"   # optional, without it uses free tier
 
 # Run the full pipeline
 awescholar --config config.json crawler run
 
 # Or pass query directly
 awescholar --config config.json crawler run "perturbation prediction|single cell" --date 2025-01-01:2025-05-30
+```
+
+The Semantic Scholar API key is resolved in this order: `--ss-api-key` CLI flag > `semantic_scholar.api_key` in config.json > `SEMANTIC_SCHOLAR_API_KEY` (or legacy `SEMANTICSCHOLAR_API_KEY`) environment variable.
+
+```bash
+awescholar --ss-api-key "your-key" crawler search "AI agent" --limit 10
 ```
 
 See [Commands](#commands) below for the full CLI reference.
@@ -119,7 +125,7 @@ Copy `config.example.json` from the [repo root](https://github.com/Webioinfo01/a
     },
     "agent_models": null,
     "semantic_scholar": {
-        "api_key": "${SEMANTICSCHOLAR_API_KEY}"
+        "api_key": "${SEMANTIC_SCHOLAR_API_KEY}"
     },
     "search": {
         "query": "AI agent|large language model|foundation model",

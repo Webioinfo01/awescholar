@@ -398,6 +398,8 @@ def main() -> int:
     )
     parser.add_argument("-v", "--version", action="version", version=f"awescholar {get_version()}")
     parser.add_argument("--config", type=str, help="Path to config.json")
+    parser.add_argument("--ss-api-key", type=str,
+                        help="Semantic Scholar API key (overrides config.json and environment)")
     sub = parser.add_subparsers(dest="command")
 
     # crawler
@@ -543,6 +545,9 @@ def main() -> int:
     except FileNotFoundError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
+
+    if getattr(args, "ss_api_key", None):
+        config["ss_api_key"] = args.ss_api_key
 
     if args.command == "init":
         return cmd_init(args, config) or 0
