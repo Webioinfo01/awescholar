@@ -31,6 +31,9 @@ src/awescholar/
   archive.py        # Archive merge operations (new2old, old2new)
   readme.py         # README generation and update
   rss.py            # RSS feed generation
+  github.py         # GitHub REST access (repo search, metrics, URL parsing)
+  enrich.py         # Paper -> official GitHub repo resolution and stars refresh
+  agentx_export.py  # Export repo-backed papers as AgentX candidate agents
 tests/
   test_cli.py       # CLI argument parsing and config tests
   test_config.py    # Config expansion tests

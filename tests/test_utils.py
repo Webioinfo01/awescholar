@@ -545,3 +545,50 @@ def test_generate_rss_lastbuilddate_is_utc():
         assert m, "lastBuildDate missing from RSS output"
         parsed = email.utils.parsedate_to_datetime(m.group(1))
         assert abs((parsed - datetime.now(UTC)).total_seconds()) < 120
+
+
+def test_update_readme_derives_badge_from_numeric_stars():
+    """Numeric githubStars (written by updater enrich) renders as a live badge."""
+    with tempfile.TemporaryDirectory() as tmp:
+        archive = os.path.join(tmp, "archive.json")
+        readme = os.path.join(tmp, "readme.md")
+        _write_json(archive, {
+            "AI Agents": [
+                {
+                    "year": "2025.06",
+                    "title": "Biomni",
+                    "codeUrl": "https://github.com/snap-stanford/biomni",
+                    "githubStars": 1523,
+                    "doi": "10.1/x",
+                }
+            ]
+        })
+
+        update_readme(archive, readme, no_backup=True)
+
+        with open(readme, encoding="utf-8") as f:
+            content = f.read()
+        assert "![GitHub Stars](https://img.shields.io/github/stars/snap-stanford/biomni)" in content
+
+
+def test_update_readme_numeric_stars_without_github_repo_render_no_badge():
+    with tempfile.TemporaryDirectory() as tmp:
+        archive = os.path.join(tmp, "archive.json")
+        readme = os.path.join(tmp, "readme.md")
+        _write_json(archive, {
+            "AI Agents": [
+                {
+                    "year": "2025.06",
+                    "title": "Hosted Tool",
+                    "codeUrl": "https://biomni.stanford.edu/",
+                    "githubStars": 99,
+                    "doi": "10.1/y",
+                }
+            ]
+        })
+
+        update_readme(archive, readme, no_backup=True)
+
+        with open(readme, encoding="utf-8") as f:
+            content = f.read()
+        assert "GitHub Stars" not in content

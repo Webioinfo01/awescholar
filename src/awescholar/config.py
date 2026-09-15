@@ -34,6 +34,21 @@ def warn_missing_ss_key() -> None:
     )
 
 
+def gh_env_token() -> str | None:
+    """Read the GitHub API token from the environment."""
+    return os.getenv("GITHUB_TOKEN") or os.getenv("GH_TOKEN")
+
+
+def warn_missing_github_token() -> None:
+    """Warn on stderr when no GitHub token could be resolved."""
+    print(
+        "Warning: no GITHUB_TOKEN found — anonymous rate limits are severe "
+        "(60 repo reads/hour, 10 searches/minute). Set GITHUB_TOKEN, add "
+        "~/.config/awescholar/.env, or pass --github-token.",
+        file=sys.stderr,
+    )
+
+
 def _expand_env_vars(value):
     """Replace ${VAR} patterns with environment variable values."""
     if isinstance(value, str):
@@ -67,6 +82,7 @@ def load_config(path: str | None) -> dict:
 
     model = raw.get("model", {})
     ss = raw.get("semantic_scholar", {})
+    gh = raw.get("github", {})
     search = raw.get("search", {})
     filt = raw.get("filter", {})
     output = raw.get("output", {})
@@ -89,6 +105,7 @@ def load_config(path: str | None) -> dict:
         "model_profiles": model_profiles,
         "agent_models": raw.get("agent_models"),
         "ss_api_key": ss.get("api_key") or ss_env_api_key(),
+        "github_token": gh.get("token") or gh_env_token(),
         "search_query": search.get("query"),
         "fields_of_study": search.get("fields_of_study"),
         "publication_date": search.get("publication_date"),

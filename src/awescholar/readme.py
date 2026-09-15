@@ -9,6 +9,7 @@ from datetime import datetime
 
 from .categories import find_matching_category, normalize_category_name
 from .data_fields import first_present, normalize_project_paper_fields
+from .github import owner_repo_from_url
 
 README_START_MARKER = "<!-- AWESCHOLAR:START -->"
 README_END_MARKER = "<!-- AWESCHOLAR:END -->"
@@ -68,12 +69,27 @@ def _format_link(url: str) -> str:
     return f"[Link]({url})"
 
 
+def _stars_badge(code_url: str, github_stars) -> str:
+    """Render the stars cell: numeric counts become a live badge derived
+    from the repo URL; legacy entries store the badge image URL directly."""
+    if github_stars in (None, ""):
+        return ""
+    value = str(github_stars)
+    if value.startswith(("http://", "https://")):
+        return f"![GitHub Stars]({value})"
+    owner_repo = owner_repo_from_url(code_url)
+    if not owner_repo:
+        return ""
+    return f"![GitHub Stars](https://img.shields.io/github/stars/{owner_repo})"
+
+
 def _format_code_product(code_url: str, github_stars: str) -> str:
     parts = []
     if code_url:
         parts.append(_format_link(code_url))
-    if github_stars:
-        parts.append(f"![GitHub Stars]({github_stars})")
+    badge = _stars_badge(code_url, github_stars)
+    if badge:
+        parts.append(badge)
     return " ".join(parts)
 
 

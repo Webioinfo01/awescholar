@@ -23,6 +23,8 @@ Match the user's intent to a task domain, then follow the workflow below.
 | "Generate RSS feed" | Updater RSS | `awescholar updater rss --archive data.json` |
 | "Add a paper by title/DOI search" | Updater Search | `awescholar updater search --json-file papers.json` |
 | "Manually add a paper record" | Updater Add | `awescholar updater add --archive data.json` |
+| "Find the GitHub repo for papers", "add code links and stars" | Updater Enrich | `awescholar updater enrich --archive docs/data.json` |
+| "Export papers as agentx agents", "feed the agent registry" | Updater Export-AgentX | `awescholar updater export-agentx --archive docs/data.json -o candidates.json` |
 | "What's in my archive about X", "search my curated papers" | Reader Query | `awescholar reader query --archive docs/data.json "X" --json` |
 | "Papers related to this one", pasted abstract/DOI/title | Reader Related | `awescholar reader related --archive docs/data.json --doi X --json` |
 | "Must-read papers for my field", "reading list", "入门必读" | Reader Recommend | `awescholar reader recommend --archive docs/data.json --field "X" --top 10` |
@@ -227,6 +229,30 @@ Decision order:
 2. `--keep newer` — later `year` wins.
 3. `--keep both` — rare: keep two entries when they are genuinely distinct papers.
 4. Use `updater update --no-dedupe` only when the user explicitly wants everything appended blindly.
+
+### Updater Enrich
+
+Use when papers lack GitHub links or star counts are stale. Fills empty `codeUrl` (GitHub search: arXiv ID first, title second; corroborated heuristic match auto-accepted, ambiguous races judged by the configured LLM) and refreshes `githubStars` as a numeric count for every linked repo. Only empty `codeUrl` fields are filled; legacy badge-URL stars migrate automatically.
+
+```bash
+awescholar updater enrich --archive docs/data.json              # resolve + refresh (LLM tiebreak on when configured)
+awescholar updater enrich --archive docs/data.json --limit 20   # cap resolution per run
+awescholar updater enrich --archive docs/data.json --no-llm     # heuristics only
+```
+
+Needs `GITHUB_TOKEN` (config `github.token` > env `GITHUB_TOKEN` > `--github-token`); anonymous limits are 10 searches/min and 60 repo reads/hour. After enriching, regenerate the README so the numeric stars render as live badges.
+
+### Updater Export-AgentX
+
+Use when feeding an agentx-style registry (repo-first agent directory). Exports every archive paper with a github.com `codeUrl` as an agentx snapshot-shaped candidate agent (slug/name/repo/paperMeta/category + live metrics when a token is available). The output is a review queue for agentx intake, not a drop-in snapshot.
+
+```bash
+awescholar updater export-agentx --archive docs/data.json -o candidates.json
+# map archive categories to agentx slugs; unmapped papers land in --default-category
+awescholar updater export-agentx --archive docs/data.json -o candidates.json --category-map map.json --default-category platforms
+```
+
+Run `updater enrich` first so papers carry their repos and numeric stars.
 
 ## Response Format (reader intents)
 

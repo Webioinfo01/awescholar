@@ -7,7 +7,7 @@ import sys
 
 from . import __version__
 from .archive import DateEncoder
-from .config import load_config, resolve_agent_config
+from .config import load_config, resolve_agent_config, warn_missing_github_token
 
 
 def get_version() -> str:
@@ -268,6 +268,56 @@ def cmd_backfill(args: argparse.Namespace, config: dict) -> int | None:
     )
 
 
+def cmd_citations(args: argparse.Namespace, config: dict) -> int | None:
+    from .backfill import backfill_citations
+
+    stats = backfill_citations(
+        archive_path=args.archive, api_key=config["ss_api_key"],
+        no_backup=args.no_backup,
+    )
+    print(f"\nFilled {stats['filled_citations']}/{stats['candidates']} citation counts")
+
+
+def cmd_enrich(args: argparse.Namespace, config: dict) -> int | None:
+    from .enrich import enrich_archive
+
+    model = api_key = base_url = None
+    if not args.no_llm:
+        model, api_key, base_url = resolve_agent_config(config, "enricher")
+
+    token = config.get("github_token")
+    if not token:
+        warn_missing_github_token()
+
+    stats = enrich_archive(
+        archive_path=args.archive, token=token, model=model or "",
+        api_key=api_key, base_url=base_url, use_llm=not args.no_llm,
+        limit=args.limit, no_backup=args.no_backup, status_cb=status,
+    )
+    print(f"\nResolved {stats['resolved']}/{stats['resolve_candidates']} repos · "
+          f"refreshed stars for {stats['refreshed']}/{stats['refresh_candidates']}")
+
+
+def cmd_export_agentx(args: argparse.Namespace, config: dict) -> int | None:
+    from .agentx_export import export_agentx
+
+    category_map = {}
+    if args.category_map:
+        try:
+            with open(args.category_map, "r", encoding="utf-8") as f:
+                category_map = json.load(f)
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"Error reading category map {args.category_map}: {exc}", file=sys.stderr)
+            return 1
+
+    export_agentx(
+        archive_path=args.archive, output_path=args.output,
+        token=config.get("github_token"), category_map=category_map,
+        default_category=args.default_category, source=args.source,
+        source_url=args.source_url, status_cb=status,
+    )
+
+
 def cmd_add(args: argparse.Namespace, config: dict) -> int | None:
     from .record import add_interactive
 
@@ -400,6 +450,8 @@ def main() -> int:
     parser.add_argument("--config", type=str, help="Path to config.json")
     parser.add_argument("--ss-api-key", type=str,
                         help="Semantic Scholar API key (overrides config.json and environment)")
+    parser.add_argument("--github-token", type=str,
+                        help="GitHub API token (overrides config.json and environment)")
     sub = parser.add_subparsers(dest="command")
 
     # crawler
@@ -477,6 +529,28 @@ def main() -> int:
     p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")
     p.add_argument("--no-backup", action="store_true", help="Do not create a backup of the archive before updating")
 
+    p = updater_sub.add_parser("citations", help="Fill empty citations fields from Semantic Scholar citationCount")
+    p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")
+    p.add_argument("--no-backup", action="store_true", help="Do not create a backup of the archive before updating")
+
+    p = updater_sub.add_parser("enrich", help="Fill empty codeUrl from GitHub search and refresh githubStars")
+    p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")
+    p.add_argument("--limit", type=int, help="Resolve at most N papers without a repo (metrics refresh is unbounded)")
+    p.add_argument("--no-llm", action="store_true",
+                   help="Skip the LLM tiebreak; only unambiguous matches resolve")
+    p.add_argument("--no-backup", action="store_true", help="Do not create a backup of the archive before updating")
+
+    p = updater_sub.add_parser("export-agentx", help="Export papers with GitHub repos as AgentX candidate agents")
+    p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")
+    p.add_argument("-o", "--output", type=str, required=True, help="Output candidate JSON path")
+    p.add_argument("--category-map", type=str,
+                   help="JSON file mapping archive categories to agentx category slugs")
+    p.add_argument("--default-category", type=str, default="platforms",
+                   help="agentx category slug for unmapped papers (default: platforms)")
+    p.add_argument("--source", type=str, default="awescholar",
+                   help="Provenance source recorded on exported agents (default: awescholar)")
+    p.add_argument("--source-url", type=str, help="Provenance URL recorded on exported agents")
+
     p = updater_sub.add_parser("counts", help="Refresh website-first README paper counts from project data JSON")
     p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")
     p.add_argument("--readme", action="append",
@@ -549,6 +623,9 @@ def main() -> int:
     if getattr(args, "ss_api_key", None):
         config["ss_api_key"] = args.ss_api_key
 
+    if getattr(args, "github_token", None):
+        config["github_token"] = args.github_token
+
     if args.command == "init":
         return cmd_init(args, config) or 0
 
@@ -569,7 +646,9 @@ def main() -> int:
         handlers = {
             "update": cmd_update, "readme": cmd_readme, "rss": cmd_rss,
             "search": cmd_search_record, "add": cmd_add, "backfill": cmd_backfill,
-            "counts": cmd_counts, "dedupe": cmd_dedupe,
+            "citations": cmd_citations,
+            "counts": cmd_counts, "dedupe": cmd_dedupe, "enrich": cmd_enrich,
+            "export-agentx": cmd_export_agentx,
         }
         return handlers[args.updater_command](args, config) or 0
 

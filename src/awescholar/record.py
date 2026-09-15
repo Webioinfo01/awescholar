@@ -290,16 +290,6 @@ def add_interactive(archive_path: str, categories: list[str] | None = None) -> N
         if not parts[1]:
             print("Title is mandatory.")
             continue
-
-        # Auto-generate GitHub stars badge
-        code_url = parts[8]
-        if "github.com" in code_url:
-            try:
-                path = code_url.split("github.com/")[1].strip("/")
-                owner_repo = "/".join(path.split("/")[:2])
-                parts[9] = f"https://img.shields.io/github/stars/{owner_repo}"
-            except Exception:  # noqa: BLE001, S110 — badge is best-effort decoration
-                pass
         break
 
     record = dict(zip(FIELDS, parts))
