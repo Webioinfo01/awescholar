@@ -211,3 +211,12 @@ def test_enrich_respects_limit_and_backup():
         assert stats["resolve_candidates"] == 1
         backups = [f for f in os.listdir(tmp) if f.endswith(".bak")]
         assert len(backups) == 1
+
+
+def test_arxiv_search_hit_with_name_subset_auto_accepts():
+    """GitHub matched the arXiv ID in the repo's README via the search index —
+    that counts as the repo citing the paper even without fetching the README."""
+    title = _title_tokens("BioAgent: an agent for biology")
+    repo = _repo("x/BioAgent")  # description does not mention the arXiv ID
+    repo["_arxiv_via_search"] = True
+    assert _score_candidate(title, "2501.04227", repo, arxiv_via_search=True) >= 5

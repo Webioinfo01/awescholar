@@ -78,14 +78,16 @@ def _title_tokens(title: str) -> set[str]:
     return tokens
 
 
-def _score_candidate(title_tokens: set[str], arxiv_id: str, repo: dict) -> int:
+def _score_candidate(title_tokens: set[str], arxiv_id: str, repo: dict,
+                     arxiv_via_search: bool = False) -> int:
     """Heuristic evidence that a repo is the paper's official implementation.
 
     The official repo is normally named after the system the paper describes,
     so a repo name derivable from the title is the core signal; an arXiv ID
-    cited by the repo itself is near-conclusive. Neither alone clears the
-    auto-accept bar — one corroborates the other, and ambiguous races go to
-    the LLM tiebreak instead.
+    cited by the repo itself is near-conclusive. The search index counts as a
+    citation: a candidate surfaced by the arXiv query has the ID in its name,
+    description, or README. Neither signal alone clears the auto-accept bar —
+    one corroborates the other, and ambiguous races go to the LLM tiebreak.
     """
     distinctive = _repo_tokens(repo.get("name") or "") - GENERIC_REPO_WORDS
     description = str(repo.get("description") or "").lower()
@@ -94,10 +96,9 @@ def _score_candidate(title_tokens: set[str], arxiv_id: str, repo: dict) -> int:
         score += 4
     elif distinctive & title_tokens:
         score += 1
-    if arxiv_id:
-        blob = f"{repo.get('full_name') or ''} {description}".lower()
-        if arxiv_id.lower() in blob:
-            score += 4
+    if arxiv_id and (arxiv_via_search
+                     or arxiv_id.lower() in f"{repo.get('full_name') or ''} {description}".lower()):
+        score += 4
     topics = {t.lower() for t in repo.get("topics") or []}
     if distinctive & topics:
         score += 1
@@ -107,7 +108,9 @@ def _score_candidate(title_tokens: set[str], arxiv_id: str, repo: dict) -> int:
 def _auto_pick(title_tokens: set[str], arxiv_id: str, candidates: list[dict]) -> dict | None:
     """Return the clear heuristic winner, or None when the race is ambiguous."""
     ranked = sorted(
-        ((_score_candidate(title_tokens, arxiv_id, c), c) for c in candidates),
+        ((_score_candidate(title_tokens, arxiv_id, c,
+                           arxiv_via_search=c.get("_arxiv_via_search", False)), c)
+         for c in candidates),
         key=lambda pair: -pair[0],
     )
     best_score, best = ranked[0]
@@ -157,21 +160,25 @@ def resolve_repo(paper: dict, token: str | None, model: str = "",
                  api_key: str | None = None, base_url: str | None = None) -> dict | None:
     """Find the official GitHub repository for a paper, or None.
 
-    arXiv-ID search first (repos citing the ID are near-matches), title
-    search second. Clear heuristic winners are accepted directly; ambiguous
-    races go to the LLM when one is configured.
+    arXiv-ID search first (a hit there means the repo cites the ID in its
+    name, description, or README), title search second. Clear heuristic
+    winners are accepted directly; ambiguous races go to the LLM when one is
+    configured.
     """
     arxiv_id = arxiv_id_from_paper(paper)
     title_tokens = _title_tokens(paper.get("title") or "")
     queries = []
     if arxiv_id:
         fields = "name,description,readme" if token else "name,description"
-        queries.append(f'"{arxiv_id}" in:{fields}')
+        queries.append((f'"{arxiv_id}" in:{fields}', True))
     if paper.get("title"):
-        queries.append(f'"{paper["title"]}" in:name,description')
+        queries.append((f'"{paper["title"]}" in:name,description', False))
 
-    for query in queries:
+    for query, via_arxiv in queries:
         candidates = search_repositories(query, token)
+        if via_arxiv:
+            for c in candidates:
+                c["_arxiv_via_search"] = True
         if not candidates:
             continue
         pick = _auto_pick(title_tokens, arxiv_id, candidates)
