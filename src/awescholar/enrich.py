@@ -30,6 +30,12 @@ AUTO_ACCEPT_SCORE = 5
 SCORE_MARGIN = 2
 OWNER_MATCH_SCORE = 2
 DESCRIPTION_SIMILARITY_SCORE = 3
+# Academic repos often have an empty description and no arXiv citation, so the
+# only officiality evidence is the name plus the community's verdict. A repo
+# with the paper's system name and a decisive star lead over same-name rivals
+# is the one the community already picked.
+POPULARITY_MIN_STARS = 30
+POPULARITY_STAR_RATIO = 5
 # The description must restate the part of the title the repo/owner name
 # cannot explain: enough rest tokens, most of them present.
 DESCRIPTION_MIN_REST_TOKENS = 3
@@ -108,7 +114,8 @@ def _score_candidate(title_tokens: set[str], arxiv_id: str, repo: dict,
     distinctive = _repo_tokens(repo.get("name") or "") - GENERIC_REPO_WORDS
     description = str(repo.get("description") or "").lower()
     score = 0
-    if title_tokens and distinctive and distinctive <= title_tokens:
+    name_subset = bool(title_tokens and distinctive and distinctive <= title_tokens)
+    if name_subset:
         score += 4
     elif distinctive & title_tokens:
         score += 1
@@ -125,6 +132,7 @@ def _score_candidate(title_tokens: set[str], arxiv_id: str, repo: dict,
     topics = {t.lower() for t in repo.get("topics") or []}
     if distinctive & topics:
         score += 1
+    repo["_name_subset"] = name_subset
     return score
 
 
@@ -143,6 +151,21 @@ def _description_similarity(title_tokens: set[str], description: str,
     return len(rest & words) / len(rest)
 
 
+def _popularity_accept(best: dict, ranked: list) -> bool:
+    """Exact system name plus a decisive star lead over every same-name rival.
+
+    Catches real official repos whose bare description defeats description-
+    based corroboration; the star gap substitutes for it.
+    """
+    if not best.get("_name_subset"):
+        return False
+    stars = int(best.get("stargazers_count") or 0)
+    if stars < POPULARITY_MIN_STARS:
+        return False
+    rival_stars = max((int(c.get("stargazers_count") or 0) for _, c in ranked[1:]), default=0)
+    return stars >= POPULARITY_STAR_RATIO * max(rival_stars, 1)
+
+
 def _auto_pick(title_tokens: set[str], arxiv_id: str, candidates: list[dict]) -> dict | None:
     """Return the clear heuristic winner, or None when the race is ambiguous."""
     ranked = sorted(
@@ -153,9 +176,9 @@ def _auto_pick(title_tokens: set[str], arxiv_id: str, candidates: list[dict]) ->
     )
     best_score, best = ranked[0]
     if best_score < AUTO_ACCEPT_SCORE:
-        return None
+        return best if _popularity_accept(best, ranked) else None
     if len(ranked) > 1 and best_score - ranked[1][0] < SCORE_MARGIN:
-        return None
+        return best if _popularity_accept(best, ranked) else None
     return best
 
 

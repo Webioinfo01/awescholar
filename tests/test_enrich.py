@@ -269,3 +269,19 @@ def test_resolve_repo_searches_system_name_before_full_title():
         pick = resolve_repo(paper, token=None)
     assert pick["full_name"] == "MetaBeeAI/MetaBeeAI"
     assert len(seen_queries) == 1  # never fell through to the full-title query
+
+
+def test_popularity_accepts_decisive_star_lead_on_bare_repos():
+    """BioMaster pattern: real repo, empty description, 113 stars vs 0."""
+    title = _title_tokens("BioMaster: Multi-agent System for Automated Bioinformatics")
+    candidates = [_repo("ai4nucleome/BioMaster", stars=113),
+                  _repo("Vincentcchu/BioMaster", stars=0)]
+    assert _auto_pick(title, "", candidates)["full_name"] == "ai4nucleome/BioMaster"
+
+
+def test_popularity_rejects_small_star_counts_and_narrow_leads():
+    title = _title_tokens("BioMaster: Multi-agent System for Automated Bioinformatics")
+    too_few = [_repo("ai4nucleome/BioMaster", stars=10), _repo("y/BioMaster")]
+    assert _auto_pick(title, "", too_few) is None
+    narrow = [_repo("ai4nucleome/BioMaster", stars=100), _repo("y/BioMaster", stars=40)]
+    assert _auto_pick(title, "", narrow) is None
