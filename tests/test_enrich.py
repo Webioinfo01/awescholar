@@ -285,3 +285,17 @@ def test_popularity_rejects_small_star_counts_and_narrow_leads():
     assert _auto_pick(title, "", too_few) is None
     narrow = [_repo("ai4nucleome/BioMaster", stars=100), _repo("y/BioMaster", stars=40)]
     assert _auto_pick(title, "", narrow) is None
+
+
+def test_popularity_rejects_repos_created_before_the_paper():
+    """ruby-grape/grape (2010) colliding with a 2025 GRAPE paper is not code."""
+    title = _title_tokens("GRAPE: Heterogeneous Graph Learning for Genetic Perturbation")
+    candidates = [_repo("ruby-grape/grape", stars=10005)]
+    candidates[0]["created_at"] = "2010-08-02T00:00:00Z"
+    assert _auto_pick(title, "", candidates, paper_year=2025) is None
+    # same repo created after the paper passes
+    candidates[0]["created_at"] = "2025-03-01T00:00:00Z"
+    assert _auto_pick(title, "", candidates, paper_year=2025)["full_name"] == "ruby-grape/grape"
+    # no creation date recorded: popularity path stays closed
+    del candidates[0]["created_at"]
+    assert _auto_pick(title, "", candidates, paper_year=2025) is None

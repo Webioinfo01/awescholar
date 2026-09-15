@@ -123,7 +123,9 @@ def _score_candidate(title_tokens: set[str], arxiv_id: str, repo: dict,
                      or arxiv_id.lower() in f"{repo.get('full_name') or ''} {description}".lower()):
         score += 4
     owner = _repo_tokens(str(repo.get("full_name") or "").split("/")[0]) - GENERIC_REPO_WORDS
-    if owner & title_tokens:
+    # Dedicated-org signal: every owner token is title-derived (an org named
+    # after the system, MetaBeeAI), not a coincidental substring (ruby-grape).
+    if owner and owner <= title_tokens:
         score += OWNER_MATCH_SCORE
     explained = distinctive | owner
     if title_tokens and _description_similarity(
@@ -151,22 +153,29 @@ def _description_similarity(title_tokens: set[str], description: str,
     return len(rest & words) / len(rest)
 
 
-def _popularity_accept(best: dict, ranked: list) -> bool:
+def _popularity_accept(best: dict, ranked: list, paper_year: int | None) -> bool:
     """Exact system name plus a decisive star lead over every same-name rival.
 
     Catches real official repos whose bare description defeats description-
-    based corroboration; the star gap substitutes for it.
+    based corroboration; the star gap substitutes for it. A repo created
+    years before the paper is a name collision (an older tool sharing the
+    system name), not the paper's code.
     """
     if not best.get("_name_subset"):
         return False
     stars = int(best.get("stargazers_count") or 0)
     if stars < POPULARITY_MIN_STARS:
         return False
+    if paper_year is not None:
+        created = str(best.get("created_at") or "")[:4]
+        if not created or int(created) < paper_year - 1:
+            return False
     rival_stars = max((int(c.get("stargazers_count") or 0) for _, c in ranked[1:]), default=0)
     return stars >= POPULARITY_STAR_RATIO * max(rival_stars, 1)
 
 
-def _auto_pick(title_tokens: set[str], arxiv_id: str, candidates: list[dict]) -> dict | None:
+def _auto_pick(title_tokens: set[str], arxiv_id: str, candidates: list[dict],
+               paper_year: int | None = None) -> dict | None:
     """Return the clear heuristic winner, or None when the race is ambiguous."""
     ranked = sorted(
         ((_score_candidate(title_tokens, arxiv_id, c,
@@ -176,9 +185,9 @@ def _auto_pick(title_tokens: set[str], arxiv_id: str, candidates: list[dict]) ->
     )
     best_score, best = ranked[0]
     if best_score < AUTO_ACCEPT_SCORE:
-        return best if _popularity_accept(best, ranked) else None
+        return best if _popularity_accept(best, ranked, paper_year) else None
     if len(ranked) > 1 and best_score - ranked[1][0] < SCORE_MARGIN:
-        return best if _popularity_accept(best, ranked) else None
+        return best if _popularity_accept(best, ranked, paper_year) else None
     return best
 
 
@@ -238,6 +247,8 @@ def resolve_repo(paper: dict, token: str | None, model: str = "",
     """
     arxiv_id = arxiv_id_from_paper(paper)
     title_tokens = _title_tokens(paper.get("title") or "")
+    year = str(paper.get("year") or "")[:4]
+    paper_year = int(year) if year.isdigit() else None
     queries = []
     if arxiv_id:
         fields = "name,description,readme" if token else "name,description"
@@ -255,7 +266,7 @@ def resolve_repo(paper: dict, token: str | None, model: str = "",
                 c["_arxiv_via_search"] = True
         if not candidates:
             continue
-        pick = _auto_pick(title_tokens, arxiv_id, candidates)
+        pick = _auto_pick(title_tokens, arxiv_id, candidates, paper_year)
         if pick is None and model and api_key:
             pick = _llm_pick(paper, candidates, model, api_key, base_url)
         return pick
