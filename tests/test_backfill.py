@@ -6,7 +6,7 @@ import tempfile
 from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
-from awescholar.backfill import backfill_affiliations
+from awescholar.backfill import backfill_affiliations, backfill_citations
 
 
 def _write_archive(path, data):
@@ -321,3 +321,70 @@ def test_backfill_shortens_pathological_affiliation_blobs():
         assert len(entries[0]["affiliation"]) <= 160
         assert "P.R. China" not in entries[0]["affiliation"]
         assert entries[1]["affiliation"] == "Imperial College London"  # untouched
+
+
+class FakeCitationPaper:
+    def __init__(self, doi, citation_count):
+        self.externalIds = {"DOI": doi}
+        self.citationCount = citation_count
+
+
+def test_backfill_citations_fills_empty_counts():
+    with tempfile.TemporaryDirectory() as tmp:
+        archive = os.path.join(tmp, "data.json")
+        _write_archive(archive, {
+            "AI Agents": [
+                {"doi": "10.1/a", "title": "Paper A", "citations": None},
+                {"doi": "10.1/b", "title": "Paper B", "citations": 7},
+                {"title": "No DOI", "citations": None},
+            ]
+        })
+        papers = [FakeCitationPaper("10.1/a", 42), FakeCitationPaper("10.1/b", 99)]
+        client = MagicMock()
+        client.get_papers.side_effect = lambda ids, fields=None, **kw: [
+            p for p in papers if p.externalIds["DOI"] in {i.removeprefix("DOI:") for i in ids}
+        ]
+        with patch("awescholar.backfill.SemanticScholar", return_value=client):
+            stats = backfill_citations(archive, no_backup=True)
+
+        entries = _read_archive(archive)["AI Agents"]
+        assert entries[0]["citations"] == 42
+        assert entries[1]["citations"] == 7  # existing count preserved
+        assert entries[2].get("citations") is None  # no DOI, skipped
+        assert stats["candidates"] == 1
+        assert stats["filled_citations"] == 1
+
+
+def test_backfill_citations_resolves_arxiv_dois():
+    """arXiv-style DOIs are looked up as ARXIV: ids and matched on externalIds."""
+    with tempfile.TemporaryDirectory() as tmp:
+        archive = os.path.join(tmp, "data.json")
+        _write_archive(archive, {
+            "AI Agents": [
+                {"doi": "10.48550/arXiv.2505.23055", "title": "Arxiv Paper", "citations": None},
+            ]
+        })
+        paper = FakeCitationPaper("10.48550/arXiv.2505.23055", 12)
+        paper.externalIds = {"DOI": "10.48550/arXiv.2505.23055", "ArXiv": "2505.23055"}
+        client = MagicMock()
+        client.get_papers.side_effect = lambda ids, fields=None, **kw: [paper]
+        with patch("awescholar.backfill.SemanticScholar", return_value=client):
+            stats = backfill_citations(archive, no_backup=True)
+
+        assert _read_archive(archive)["AI Agents"][0]["citations"] == 12
+        assert stats["filled_citations"] == 1
+        assert client.get_papers.call_args[0][0] == ["ARXIV:2505.23055"]
+
+
+def test_backfill_citations_no_candidates_is_noop():
+    with tempfile.TemporaryDirectory() as tmp:
+        archive = os.path.join(tmp, "data.json")
+        _write_archive(archive, {
+            "AI Agents": [{"doi": "10.1/a", "title": "Paper A", "citations": 3}]
+        })
+        with patch("awescholar.backfill.SemanticScholar") as mock_ss:
+            stats = backfill_citations(archive, no_backup=True)
+            mock_ss.assert_not_called()
+
+        assert stats == {"candidates": 0, "filled_citations": 0, "papers_missing": 0}
+        assert _read_archive(archive)["AI Agents"][0]["citations"] == 3

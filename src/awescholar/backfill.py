@@ -10,6 +10,9 @@ Three sources are consulted, cheapest-per-coverage first:
 Only empty fields are filled, entries never move between categories, and
 the affiliation always comes from the same author as the team, so the
 pair can never mismatch.
+
+Also provides ``backfill_citations``, which fills empty ``citations``
+counts from Semantic Scholar ``citationCount``.
 """
 
 import json
@@ -328,4 +331,96 @@ def backfill_affiliations(archive_path: str, api_key: str | None = None,
         "reused_trusted": reused_trusted,
         "papers_missing": papers_missing,
         "authors_missing": authors_missing,
+    }
+
+
+def backfill_citations(archive_path: str, api_key: str | None = None,
+                       no_backup: bool = False, status_cb=print) -> dict:
+    """Fill empty ``citations`` fields from Semantic Scholar ``citationCount``.
+
+    Entries with a DOI and no citation count are batch-fetched. arXiv-style
+    DOIs (``10.48550/arXiv.…``) are also looked up as ``ARXIV:…`` because
+    Semantic Scholar often indexes them that way. Existing counts are never
+    overwritten. Returns a stats dict.
+    """
+    with open(archive_path, "r", encoding="utf-8") as f:
+        archive = json.load(f)
+
+    candidates = []  # (entry,)
+    for papers in archive.values():
+        if not isinstance(papers, list):
+            continue
+        for p in papers:
+            if p.get("doi") and p.get("citations") in (None, ""):
+                candidates.append(p)
+
+    status_cb(f"Entries missing citations with a DOI: {len(candidates)}")
+    if not candidates:
+        return {"candidates": 0, "filled_citations": 0, "papers_missing": 0}
+
+    sch = SemanticScholar(api_key=api_key) if api_key else SemanticScholar()
+
+    def _ss_id(doi: str) -> str:
+        doi = doi.strip()
+        for prefix in ("https://doi.org/", "http://doi.org/", "doi.org/", "doi:"):
+            if doi.lower().startswith(prefix):
+                doi = doi[len(prefix):]
+                break
+        m = re.match(r"10\.48550/arxiv\.(.+)", doi, flags=re.IGNORECASE)
+        if m:
+            return f"ARXIV:{m.group(1)}"
+        # bioRxiv/medRxiv deposits sometimes store a version suffix SS does not use
+        doi = re.sub(r"(10\.1101/\d{4}\.\d{2}\.\d{2}\.\d+)v\d+$", r"\1", doi, flags=re.IGNORECASE)
+        return f"DOI:{doi}"
+
+    filled = papers_missing = 0
+    for n, chunk_entries in enumerate(_chunk(candidates, PAPERS_PER_BATCH)):
+        if n:
+            time.sleep(BATCH_PAUSE_SECONDS)
+        id_list = [_ss_id(p["doi"]) for p in chunk_entries]
+        fetched = {}  # original doi -> Paper
+        for paper in _call_sch(sch.get_papers, id_list, fields=["externalIds", "citationCount"]):
+            ext = paper.externalIds or {}
+            doi = ext.get("DOI") or ext.get("ArXiv")
+            if doi:
+                fetched[doi.lower() if isinstance(doi, str) else doi] = paper
+                if ext.get("DOI"):
+                    fetched[str(ext["DOI"]).lower()] = paper
+                if ext.get("ArXiv"):
+                    fetched[str(ext["ArXiv"]).lower()] = paper
+        for entry in chunk_entries:
+            doi = entry["doi"]
+            cleaned = doi
+            for prefix in ("https://doi.org/", "http://doi.org/", "doi.org/", "doi:"):
+                if cleaned.lower().startswith(prefix):
+                    cleaned = cleaned[len(prefix):]
+                    break
+            arxiv = re.match(r"10\.48550/arxiv\.(.+)", cleaned, flags=re.IGNORECASE)
+            paper = (
+                fetched.get(doi.lower())
+                or fetched.get(cleaned.lower())
+                or (fetched.get(arxiv.group(1).lower()) if arxiv else None)
+            )
+            count = getattr(paper, "citationCount", None) if paper else None
+            if count is None:
+                papers_missing += 1
+                continue
+            entry["citations"] = int(count)
+            filled += 1
+
+    status_cb(f"Semantic Scholar: filled {filled} citation counts ({papers_missing} papers not found)")
+
+    if not no_backup:
+        ts = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
+        backup_path = f"{archive_path}.{ts}.bak"
+        shutil.copy2(archive_path, backup_path)
+        status_cb(f"Created backup: {backup_path}")
+
+    with open(archive_path, "w", encoding="utf-8") as f:
+        json.dump(archive, f, indent=2, ensure_ascii=False)
+
+    return {
+        "candidates": len(candidates),
+        "filled_citations": filled,
+        "papers_missing": papers_missing,
     }

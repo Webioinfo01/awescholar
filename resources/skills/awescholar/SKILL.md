@@ -24,6 +24,7 @@ Match the user's intent to a task domain, then follow the workflow below.
 | "Add a paper by title/DOI search" | Updater Search | `awescholar updater search --json-file papers.json` |
 | "Manually add a paper record" | Updater Add | `awescholar updater add --archive data.json` |
 | "Find the GitHub repo for papers", "add code links and stars" | Updater Enrich | `awescholar updater enrich --archive docs/data.json` |
+| "Backfill citation counts", "fill citations" | Updater Citations | `awescholar updater citations --archive docs/data.json` |
 | "Export papers as agentx agents", "feed the agent registry" | Updater Export-AgentX | `awescholar updater export-agentx --archive docs/data.json -o candidates.json` |
 | "What's in my archive about X", "search my curated papers" | Reader Query | `awescholar reader query --archive docs/data.json "X" --json` |
 | "Papers related to this one", pasted abstract/DOI/title | Reader Related | `awescholar reader related --archive docs/data.json --doi X --json` |
@@ -151,6 +152,17 @@ Workflow for reviewed search:
 1. `updater search --json-file papers.json` — search and save for review
 2. Review and edit `papers.json` as needed
 3. `updater update --direction new2old --input papers.json --archive docs/data.json` — merge when ready
+
+### Updater Citations
+
+Use when filling empty `citations` counts from Semantic Scholar (powers the website citation badge under Paper).
+
+```bash
+awescholar updater citations --archive docs/data.json
+awescholar updater citations --archive docs/data.json --no-backup
+```
+
+Only empty counts are filled; existing values are preserved. Entries need a DOI.
 
 ### Reader (Query · Related · Recommend · Stats)
 
