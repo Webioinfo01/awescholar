@@ -12,6 +12,7 @@ from awescholar.enrich import (
     _score_candidate,
     _title_tokens,
     enrich_archive,
+    resolve_repo,
 )
 
 
@@ -241,3 +242,30 @@ def test_description_restatement_plus_name_subset_auto_accepts():
 def test_supporting_signals_alone_stay_below_bar():
     title = _title_tokens("BioAgent: an agent for biology")
     assert _score_candidate(title, "", _repo("x/BioAgent", description="BioAgent agent bio")) < 5
+
+
+def test_system_name_extraction():
+    from awescholar.enrich import _system_name
+    assert _system_name("MetaBeeAI: an AI pipeline for reviews") == "MetaBeeAI"
+    assert _system_name("TxAgent — therapeutic reasoning") == "TxAgent"
+    assert _system_name("A study of agents in biology") == ""
+    assert _system_name("Some Extremely Long System Name With Many Words: x") == ""
+    assert _system_name("") == ""
+
+
+def test_resolve_repo_searches_system_name_before_full_title():
+    """System-name query finds repos the full-title phrase search misses."""
+    paper = {"title": "MetaBeeAI: an AI pipeline for reviews"}
+    metabeeai = _repo("MetaBeeAI/MetaBeeAI", description="Main MetaBeeAI pipeline")
+    seen_queries = []
+
+    def fake_search(q, t, per_page=5):
+        seen_queries.append(q)
+        if "MetaBeeAI" in q and "pipeline for reviews" not in q:
+            return [metabeeai]
+        return []
+
+    with patch("awescholar.enrich.search_repositories", side_effect=fake_search):
+        pick = resolve_repo(paper, token=None)
+    assert pick["full_name"] == "MetaBeeAI/MetaBeeAI"
+    assert len(seen_queries) == 1  # never fell through to the full-title query

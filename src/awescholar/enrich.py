@@ -194,14 +194,24 @@ def _llm_pick(paper: dict, candidates: list[dict], model: str,
     return None
 
 
+def _system_name(title: str) -> str:
+    """The leading system name of a 'Name: description' title, or ''. Repos
+    are named after the system, and GitHub's phrase search over the full
+    title misses repos whose metadata only carries the name."""
+    head = re.split(r"[:：—–]", str(title or ""), maxsplit=1)[0].strip()
+    if 2 <= len(head) <= 40 and len(head.split()) <= 5:
+        return head
+    return ""
+
+
 def resolve_repo(paper: dict, token: str | None, model: str = "",
                  api_key: str | None = None, base_url: str | None = None) -> dict | None:
     """Find the official GitHub repository for a paper, or None.
 
-    arXiv-ID search first (a hit there means the repo cites the ID in its
-    name, description, or README), title search second. Clear heuristic
-    winners are accepted directly; ambiguous races go to the LLM when one is
-    configured.
+    Search rounds: arXiv ID (a hit there means the repo cites the ID in its
+    name, description, or README), leading system name, full title. Clear
+    heuristic winners are accepted directly; ambiguous races go to the LLM
+    when one is configured.
     """
     arxiv_id = arxiv_id_from_paper(paper)
     title_tokens = _title_tokens(paper.get("title") or "")
@@ -209,6 +219,9 @@ def resolve_repo(paper: dict, token: str | None, model: str = "",
     if arxiv_id:
         fields = "name,description,readme" if token else "name,description"
         queries.append((f'"{arxiv_id}" in:{fields}', True))
+    name = _system_name(paper.get("title") or "")
+    if name:
+        queries.append((f'"{name}" in:name,description', False))
     if paper.get("title"):
         queries.append((f'"{paper["title"]}" in:name,description', False))
 
