@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.2.2
+
+Citation-metadata release — `updater search` records now carry the Semantic Scholar `citationCount`, and the `citations` field survives the whole curation pipeline.
+
+### Highlights
+
+- `updater search` (by title or DOI) now requests `citationCount` and writes it into each record as `citations`, so `--json-file` output and archive additions carry live citation counts
+- The `citations` field joins both paper schemas: project data (`data.json`, now 12 fields) and the updater pipeline (`updater.json` / `updater_filter.json`, now 14 fields); the alias map accepts `citations`, `citationCount`, and `citation_count`, and archive merges keep existing counts when the incoming value is empty
+- The README table is unchanged — `citations` is data-only and does not add a column
+
 ## v0.2.1
 
 Repository-scaffolding, read-only query, and duplicate-review release — `awescholar init` generates a complete website-first curated list, a new `reader` group gives the archive a query/recommend face, and `updater` holds back suspected preprint-vs-published duplicates for explicit review.

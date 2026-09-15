@@ -185,7 +185,24 @@ def test_merge_new_preserves_existing_code_product_fields_when_old_updater_lacks
         assert paper["githubStars"] == "https://img.shields.io/github/stars/snap-stanford/biomni"
 
 
-def test_merge_new_does_not_clear_existing_code_product_fields_with_empty_values():
+def test_merge_new_keeps_citations():
+    with tempfile.TemporaryDirectory() as tmp:
+        new = os.path.join(tmp, "new.json")
+        archive = os.path.join(tmp, "archive.json")
+        _write_json(new, {
+            "AI Agents": [
+                {
+                    "doi": "10.1101/2025.05.30.656746",
+                    "title": "Biomni: A General-Purpose Biomedical AI Agent",
+                    "citations": 42,
+                }
+            ]
+        })
+
+        result = merge_new_to_archive(new, archive)
+
+        paper = result["AI Agents"][0]
+        assert paper["citations"] == 42
     with tempfile.TemporaryDirectory() as tmp:
         new = os.path.join(tmp, "new.json")
         archive = os.path.join(tmp, "archive.json")

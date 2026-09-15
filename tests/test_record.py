@@ -79,6 +79,7 @@ def _mock_paper(title="Test Paper", doi="10.1/test"):
     paper.url = "https://example.com/paper"
     paper.journal = None
     paper.year = 2025
+    paper.citationCount = 42
     return paper
 
 
@@ -101,6 +102,24 @@ def test_search_and_add_json_file_creates_flat_list(MockSS, mock_input):
         assert len(papers) == 1
         assert papers[0]["title"] == "My Paper Title"
         assert papers[0]["doi"] == "10.1/mp"
+
+
+@patch("builtins.input", side_effect=["Cited Paper", ""])
+@patch("awescholar.record.SemanticScholar")
+def test_search_and_add_json_file_includes_citations(MockSS, mock_input):
+    """Records carry the Semantic Scholar citationCount as `citations`."""
+    mock_client = MagicMock()
+    MockSS.return_value = mock_client
+    mock_client.search_paper.return_value = _mock_paper(title="Cited Paper", doi="10.1/cited")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        json_file = os.path.join(tmp, "papers.json")
+
+        search_and_add(json_file=json_file, by="title")
+
+        with open(json_file) as f:
+            papers = json.load(f)
+        assert papers[0]["citations"] == 42
 
 
 @patch("builtins.input", side_effect=["Duplicate Paper", ""])

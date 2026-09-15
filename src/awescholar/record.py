@@ -64,6 +64,7 @@ def _paper_to_record(paper) -> dict | None:
         "paperUrl": paper_url,
         "codeUrl": "",
         "githubStars": "",
+        "citations": getattr(paper, "citationCount", None),
         "doi": doi,
     }
 
@@ -75,7 +76,8 @@ def search_by_title(title: str, sch: SemanticScholar) -> dict | None:
         paper = sch.search_paper(
             title, limit=1, match_title=True,
             fields=["paperId", "title", "venue", "year",
-                    "publicationDate", "authors", "externalIds", "url", "journal"],
+                    "publicationDate", "authors", "externalIds", "url", "journal",
+                    "citationCount"],
         )
         return _paper_to_record(paper)
     except Exception as e:  # noqa: BLE001 — one failed lookup must not abort the batch
@@ -90,7 +92,8 @@ def search_by_doi(doi: str, sch: SemanticScholar) -> dict | None:
         paper = sch.get_paper(
             f"DOI:{doi}",
             fields=["paperId", "title", "venue", "year",
-                    "publicationDate", "authors", "externalIds", "url", "journal"],
+                    "publicationDate", "authors", "externalIds", "url", "journal",
+                    "citationCount"],
         )
         return _paper_to_record(paper)
     except Exception as e:  # noqa: BLE001 — one failed lookup must not abort the batch

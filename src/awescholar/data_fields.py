@@ -18,6 +18,7 @@ PROJECT_PAPER_FIELDS = (
     "paperUrl",
     "codeUrl",
     "githubStars",
+    "citations",
     "doi",
 )
 
@@ -33,6 +34,7 @@ UPDATER_PAPER_FIELDS = (
     "paperUrl",
     "codeUrl",
     "githubStars",
+    "citations",
     "doi",
     "reason_for_inclusion",
 )
@@ -49,6 +51,7 @@ FIELD_ALIASES = {
     "paperUrl": ("paperUrl", "paper_url", "url"),
     "codeUrl": ("codeUrl", "code_url", "codeURL"),
     "githubStars": ("githubStars", "github_stars", "githubStarsUrl"),
+    "citations": ("citations", "citationCount", "citation_count"),
     "doi": ("doi", "DOI"),
     "reason_for_inclusion": ("reason_for_inclusion",),
 }
@@ -126,12 +129,12 @@ def normalize_paper(paper: dict, fields: tuple) -> dict:
 
 
 def normalize_project_paper_fields(paper: dict) -> dict:
-    """Project data (data.json) — 11 fields only."""
+    """Project data (data.json) — 12 fields only."""
     return normalize_paper(paper, PROJECT_PAPER_FIELDS)
 
 
 def normalize_updater_paper_fields(paper: dict) -> dict:
-    """Updater pipeline (updater.json / updater_filter.json) — 13 fields."""
+    """Updater pipeline (updater.json / updater_filter.json) — 14 fields."""
     return normalize_paper(paper, UPDATER_PAPER_FIELDS)
 
 
