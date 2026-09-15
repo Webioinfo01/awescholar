@@ -24,9 +24,9 @@ def _repo(full_name, description="", stars=0):
 # ── tokenization ──────────────────────────────────────────────
 
 def test_repo_tokens_splits_camel_and_separators():
-    assert _repo_tokens("AgentLaboratory") == {"agent", "laboratory"}
-    assert _repo_tokens("scikit-learn") == {"scikit", "learn"}
-    assert _repo_tokens("scGPT") == {"sc", "gpt"}
+    assert _repo_tokens("AgentLaboratory") == {"agent", "laboratory", "agentlaboratory"}
+    assert _repo_tokens("scikit-learn") == {"scikit", "learn", "scikitlearn"}
+    assert _repo_tokens("scGPT") == {"sc", "gpt", "scgpt"}
 
 
 def test_title_tokens_drops_stopwords_and_short_words():
@@ -220,3 +220,24 @@ def test_arxiv_search_hit_with_name_subset_auto_accepts():
     repo = _repo("x/BioAgent")  # description does not mention the arXiv ID
     repo["_arxiv_via_search"] = True
     assert _score_candidate(title, "2501.04227", repo, arxiv_via_search=True) >= 5
+
+
+def test_owner_match_plus_name_subset_auto_accepts():
+    """MetaBeeAI pattern: a dedicated org shipping the same-named repo."""
+    title = _title_tokens("MetaBeeAI: an AI pipeline for full-text systematic reviews")
+    repo = _repo("MetaBeeAI/MetaBeeAI", description="Main MetaBeeAI pipeline")
+    assert _score_candidate(title, "", repo) >= 5
+
+
+def test_description_restatement_plus_name_subset_auto_accepts():
+    """AgentMol pattern: the description restates the paper title."""
+    title = _title_tokens(
+        "AgentMol: Multi-Model AI System for Automatic Drug-Target Identification")
+    repo = _repo("golempharm/agentmol",
+                 description="AgentMol: multimodel AI system for automatic drug-target identification")
+    assert _score_candidate(title, "", repo) >= 5
+
+
+def test_supporting_signals_alone_stay_below_bar():
+    title = _title_tokens("BioAgent: an agent for biology")
+    assert _score_candidate(title, "", _repo("x/BioAgent", description="BioAgent agent bio")) < 5

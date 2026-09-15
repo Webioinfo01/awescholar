@@ -28,6 +28,12 @@ from .llm import complete
 
 AUTO_ACCEPT_SCORE = 5
 SCORE_MARGIN = 2
+OWNER_MATCH_SCORE = 2
+DESCRIPTION_SIMILARITY_SCORE = 3
+# The description must restate the part of the title the repo/owner name
+# cannot explain: enough rest tokens, most of them present.
+DESCRIPTION_MIN_REST_TOKENS = 3
+DESCRIPTION_SIMILARITY_THRESHOLD = 0.5
 
 STOPWORDS = {
     "the", "for", "and", "with", "from", "using", "toward", "towards", "via",
@@ -60,7 +66,16 @@ REPO_PICK_SYSTEM = (
 
 
 def _repo_tokens(name: str) -> set[str]:
-    return {m.group(0).lower() for m in _CAMEL_RE.finditer(name or "") if len(m.group(0)) >= 2}
+    """Camel/separator-split tokens plus the unsplit whole word, lowercased.
+
+    Titles write system names as one word (BioAgent) while repos split them
+    (bio-agent), and vice versa, so both forms are kept as evidence.
+    """
+    tokens = {m.group(0).lower() for m in _CAMEL_RE.finditer(name or "") if len(m.group(0)) >= 2}
+    whole = re.sub(r"[^a-z0-9]", "", str(name or "").lower())
+    if len(whole) >= 2:
+        tokens.add(whole)
+    return tokens
 
 
 def _title_tokens(title: str) -> set[str]:
@@ -82,12 +97,13 @@ def _score_candidate(title_tokens: set[str], arxiv_id: str, repo: dict,
                      arxiv_via_search: bool = False) -> int:
     """Heuristic evidence that a repo is the paper's official implementation.
 
-    The official repo is normally named after the system the paper describes,
-    so a repo name derivable from the title is the core signal; an arXiv ID
-    cited by the repo itself is near-conclusive. The search index counts as a
-    citation: a candidate surfaced by the arXiv query has the ID in its name,
-    description, or README. Neither signal alone clears the auto-accept bar —
-    one corroborates the other, and ambiguous races go to the LLM tiebreak.
+    Core signal: the repo name derives from the title (official repos are
+    named after the system the paper describes). Near-conclusive: the repo
+    cites the paper's arXiv ID — directly, or by surfacing from the arXiv
+    search (the index matched name, description, or README). Supporting:
+    a dedicated owner (org named after the system) and a description that
+    restates the paper title. No single signal clears the auto-accept bar —
+    one corroborates another, and ambiguous races go to the LLM tiebreak.
     """
     distinctive = _repo_tokens(repo.get("name") or "") - GENERIC_REPO_WORDS
     description = str(repo.get("description") or "").lower()
@@ -99,10 +115,32 @@ def _score_candidate(title_tokens: set[str], arxiv_id: str, repo: dict,
     if arxiv_id and (arxiv_via_search
                      or arxiv_id.lower() in f"{repo.get('full_name') or ''} {description}".lower()):
         score += 4
+    owner = _repo_tokens(str(repo.get("full_name") or "").split("/")[0]) - GENERIC_REPO_WORDS
+    if owner & title_tokens:
+        score += OWNER_MATCH_SCORE
+    explained = distinctive | owner
+    if title_tokens and _description_similarity(
+            title_tokens, description, explained) >= DESCRIPTION_SIMILARITY_THRESHOLD:
+        score += DESCRIPTION_SIMILARITY_SCORE
     topics = {t.lower() for t in repo.get("topics") or []}
     if distinctive & topics:
         score += 1
     return score
+
+
+def _description_similarity(title_tokens: set[str], description: str,
+                            explained: set[str]) -> float:
+    """How much of the title the description covers beyond the repo/owner name.
+
+    Tokens already explained by the name are excluded, so echoing the repo
+    name earns nothing — only title content the name cannot account for
+    counts as the description restating the paper.
+    """
+    rest = title_tokens - explained
+    if len(rest) < DESCRIPTION_MIN_REST_TOKENS:
+        return 0.0
+    words = set(re.findall(r"[a-z0-9]{2,}", description)) - STOPWORDS
+    return len(rest & words) / len(rest)
 
 
 def _auto_pick(title_tokens: set[str], arxiv_id: str, candidates: list[dict]) -> dict | None:
