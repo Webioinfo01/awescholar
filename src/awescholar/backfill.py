@@ -26,6 +26,7 @@ from datetime import datetime
 from semanticscholar import SemanticScholar
 
 from .data_fields import format_affiliations, normalize_name
+from .utils import matches_only
 
 PAPERS_PER_BATCH = 500
 AUTHORS_PER_BATCH = 1000
@@ -197,7 +198,8 @@ def _openalex_last_authors(dois: list[str]) -> dict[str, dict]:
 
 
 def backfill_affiliations(archive_path: str, api_key: str | None = None,
-                          no_backup: bool = False, status_cb=print) -> dict:
+                          no_backup: bool = False, status_cb=print,
+                          only: list[str] | None = None) -> dict:
     """Fill empty affiliation/team fields in an archive JSON from Semantic Scholar.
 
     Only entries with a DOI and an empty affiliation are fetched. Empty team
@@ -209,14 +211,23 @@ def backfill_affiliations(archive_path: str, api_key: str | None = None,
     # Names already trusted in this archive: normalized name -> display form.
     trusted: dict[str, str] = {}
     candidates = []  # (category, index, entry)
+    total_doi_no_aff = 0
     for category, papers in archive.items():
         for i, p in enumerate(papers):
             if p.get("team"):
                 trusted.setdefault(normalize_name(p["team"]), p["team"])
             if not p.get("affiliation") and p.get("doi"):
-                candidates.append((category, i, p))
+                total_doi_no_aff += 1
+                if matches_only(p, only or []):
+                    candidates.append((category, i, p))
 
-    status_cb(f"Entries missing affiliation with a DOI: {len(candidates)}")
+    if only:
+        status_cb(
+            f"Entries missing affiliation with a DOI: {total_doi_no_aff} "
+            f"(scoped to {len(candidates)} matching entries)"
+        )
+    else:
+        status_cb(f"Entries missing affiliation with a DOI: {len(candidates)}")
     if not candidates:
         return {"candidates": 0, "filled_affiliations": 0, "filled_teams": 0,
                 "reused_trusted": 0, "papers_missing": 0, "authors_missing": 0}
@@ -282,6 +293,8 @@ def backfill_affiliations(archive_path: str, api_key: str | None = None,
     # Crossref fallback for whatever still lacks an affiliation — it is the
     # primary source for affiliations; SS rarely carries them.
     trusted, still_missing = _scan_archive(archive)
+    if only:
+        still_missing = [p for p in still_missing if matches_only(p, only or [])]
     crossref_affiliations = crossref_teams = 0
     if still_missing:
         status_cb(f"Crossref: checking {len(still_missing)} remaining DOIs...")
@@ -300,6 +313,8 @@ def backfill_affiliations(archive_path: str, api_key: str | None = None,
 
     # OpenAlex fallback — curated institutions covering many works Crossref lacks.
     trusted, still_missing = _scan_archive(archive)
+    if only:
+        still_missing = [p for p in still_missing if matches_only(p, only or [])]
     openalex_affiliations = openalex_teams = 0
     if still_missing:
         status_cb(f"OpenAlex: checking {len(still_missing)} remaining DOIs...")
@@ -335,7 +350,8 @@ def backfill_affiliations(archive_path: str, api_key: str | None = None,
 
 
 def backfill_citations(archive_path: str, api_key: str | None = None,
-                       no_backup: bool = False, status_cb=print) -> dict:
+                       no_backup: bool = False, status_cb=print,
+                       only: list[str] | None = None) -> dict:
     """Fill empty ``citations`` fields from Semantic Scholar ``citationCount``.
 
     Entries with a DOI and no citation count are batch-fetched. arXiv-style
@@ -346,15 +362,23 @@ def backfill_citations(archive_path: str, api_key: str | None = None,
     with open(archive_path, "r", encoding="utf-8") as f:
         archive = json.load(f)
 
-    candidates = []  # (entry,)
+    candidates_all = []  # list[dict]
     for papers in archive.values():
         if not isinstance(papers, list):
             continue
         for p in papers:
             if p.get("doi") and p.get("citations") in (None, ""):
-                candidates.append(p)
+                candidates_all.append(p)
 
-    status_cb(f"Entries missing citations with a DOI: {len(candidates)}")
+    candidates = [p for p in candidates_all if matches_only(p, only or [])]
+
+    if only:
+        status_cb(
+            f"Entries missing citations with a DOI: {len(candidates_all)} "
+            f"(scoped to {len(candidates)} matching entries)"
+        )
+    else:
+        status_cb(f"Entries missing citations with a DOI: {len(candidates)}")
     if not candidates:
         return {"candidates": 0, "filled_citations": 0, "papers_missing": 0}
 

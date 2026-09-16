@@ -7,7 +7,13 @@ import re
 import tempfile
 from datetime import UTC, datetime
 
-from awescholar.utils import generate_rss, merge_archive_to_new, merge_new_to_archive, update_readme
+from awescholar.utils import (
+    generate_rss,
+    matches_only,
+    merge_archive_to_new,
+    merge_new_to_archive,
+    update_readme,
+)
 
 
 def _write_json(path: str, data: dict) -> None:
@@ -592,3 +598,43 @@ def test_update_readme_numeric_stars_without_github_repo_render_no_badge():
         with open(readme, encoding="utf-8") as f:
             content = f.read()
         assert "GitHub Stars" not in content
+
+
+# ── matches_only ──────────────────────────────────────────────
+
+def test_matches_only_empty_list_returns_true():
+    assert matches_only({"doi": "10.1/a", "title": "Paper A"}, []) is True
+
+
+def test_matches_only_exact_doi_match():
+    assert matches_only({"doi": "10.1/a", "title": "Paper A"}, ["10.1/a"]) is True
+
+
+def test_matches_only_doi_case_insensitive():
+    assert matches_only({"doi": "10.1/A", "title": "Paper A"}, ["10.1/a"]) is True
+
+
+def test_matches_only_title_substring():
+    assert matches_only({"doi": "", "title": "BioAgent Paper"}, ["bioagent"]) is True
+
+
+def test_matches_only_title_case_insensitive():
+    assert matches_only({"doi": "", "title": "BioAgent Paper"}, ["BIOAGENT"]) is True
+
+
+def test_matches_only_no_match():
+    assert matches_only({"doi": "10.1/a", "title": "Paper A"}, ["10.1/b"]) is False
+
+
+def test_matches_only_non_string_doi_does_not_match():
+    assert matches_only({"doi": None, "title": "Paper A"}, ["10.1/a"]) is False
+    assert matches_only({"doi": 123, "title": "Paper A"}, ["123"]) is False
+
+
+def test_matches_only_empty_title_does_not_match_substring():
+    assert matches_only({"doi": "10.1/a", "title": ""}, ["paper"]) is False
+
+
+def test_matches_only_any_pattern_sufficient():
+    assert matches_only({"doi": "10.1/a", "title": "Paper A"}, ["10.1/b", "agent"]) is False
+    assert matches_only({"doi": "10.1/a", "title": "Agent Paper"}, ["10.1/b", "agent"]) is True

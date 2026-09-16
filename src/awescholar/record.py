@@ -51,9 +51,13 @@ def _paper_to_record(paper) -> dict | None:
         if journal and hasattr(journal, "name"):
             venue = journal.name or ""
 
-    paper_url = getattr(paper, "url", None) or ""
-    if not paper_url and paper.paperId:
-        paper_url = f"https://www.semanticscholar.org/paper/{paper.paperId}"
+    # DOI links are canonical; S2 page URL is the last resort, never the first choice.
+    if doi:
+        paper_url = f"https://doi.org/{doi}"
+    else:
+        paper_url = getattr(paper, "url", None) or ""
+        if not paper_url and paper.paperId:
+            paper_url = f"https://www.semanticscholar.org/paper/{paper.paperId}"
 
     return {
         "year": year,
@@ -69,6 +73,8 @@ def _paper_to_record(paper) -> dict | None:
         "githubStars": "",
         "citations": getattr(paper, "citationCount", None),
         "doi": doi,
+        # Temporary: stripped from records before persisting (archive has no abstract field).
+        "abstract": getattr(paper, "abstract", None) or "",
     }
 
 
@@ -80,7 +86,7 @@ def search_by_title(title: str, sch: SemanticScholar) -> dict | None:
             title, limit=1, match_title=True,
             fields=["paperId", "title", "venue", "year",
                     "publicationDate", "authors", "externalIds", "url", "journal",
-                    "citationCount"],
+                    "citationCount", "abstract"],
         )
         return _paper_to_record(paper)
     except Exception as e:  # noqa: BLE001 — one failed lookup must not abort the batch
@@ -96,7 +102,7 @@ def search_by_doi(doi: str, sch: SemanticScholar) -> dict | None:
             f"DOI:{doi}",
             fields=["paperId", "title", "venue", "year",
                     "publicationDate", "authors", "externalIds", "url", "journal",
-                    "citationCount"],
+                    "citationCount", "abstract"],
         )
         return _paper_to_record(paper)
     except Exception as e:  # noqa: BLE001 — one failed lookup must not abort the batch
@@ -149,6 +155,91 @@ def _is_duplicate(papers: list, record: dict) -> bool:
     return False
 
 
+def _normalize_code_url(code_url: str) -> str | None:
+    """Accept owner/repo shorthand or a full URL; return https://github.com/{owner}/{repo}."""
+    url = code_url.strip()
+    if not url:
+        return None
+    if url.startswith("https://github.com/"):
+        owner_repo = url[len("https://github.com/"):]
+    elif url.startswith("github.com/"):
+        owner_repo = url[len("github.com/"):]
+    else:
+        owner_repo = url
+    if "/" not in owner_repo:
+        return None
+    owner, repo = owner_repo.strip("/").split("/", 1)
+    if not owner or not repo:
+        return None
+    return f"https://github.com/{owner}/{repo}"
+
+
+def _annotate_records(
+    records: list[dict],
+    stats: dict,
+    annotate: bool,
+    annotate_model: str,
+    annotate_api_key: str | None,
+    annotate_base_url: str | None,
+    categories: list[str] | None,
+) -> None:
+    """Fill `domain` for added records with a DOI via run_annotate (in place)."""
+    if not annotate:
+        return
+    if not annotate_api_key:
+        print("  Skipping annotation: no annotate_api_key provided.")
+        return
+    doi_records = [r for r in records if r.get("doi")]
+    if not doi_records:
+        return
+    # Lazy import to avoid import cycles.
+    from .pipeline import run_annotate
+
+    try:
+        result = run_annotate(
+            papers=[
+                {"doi": r["doi"], "title": r["title"], "abstract": r["abstract"]}
+                for r in doi_records
+            ],
+            model=annotate_model,
+            categories=categories,
+            api_key=annotate_api_key,
+            base_url=annotate_base_url,
+        )
+    except Exception as e:  # noqa: BLE001 — an LLM failure must not lose added records
+        print(f"  Annotation failed: {e}")
+        return
+
+    doi_to_domain: dict[str, str] = {}
+    for entries in result.values():
+        for entry in entries:
+            domain = entry.get("domain") or ""
+            if domain and entry.get("doi"):
+                doi_to_domain[entry["doi"]] = domain
+
+    for record in doi_records:
+        domain = doi_to_domain.get(record["doi"])
+        if domain:
+            record["domain"] = domain
+            stats["annotated"] += 1
+
+    print(f"  Annotated domain for {stats['annotated']}/{len(doi_records)} added paper(s)")
+
+
+def _apply_code(
+    record: dict,
+    norm_code_url: str | None,
+    stars_style: str,
+) -> None:
+    """Write normalized codeUrl and (for badge style) the shields stars URL into a record."""
+    if not norm_code_url:
+        return
+    record["codeUrl"] = norm_code_url
+    if stars_style == "badge" and norm_code_url.startswith("https://github.com/"):
+        owner, repo = norm_code_url[len("https://github.com/"):].split("/")
+        record["githubStars"] = f"https://img.shields.io/github/stars/{owner}/{repo}"
+
+
 def search_and_add(
     archive_path: str | None = None,
     by: str = "title",
@@ -156,11 +247,18 @@ def search_and_add(
     json_file: str | None = None,
     category: str | None = None,
     queries: list[str] | None = None,
-) -> None:
+    code_url: str | None = None,
+    stars_style: str = "numeric",
+    annotate: bool = False,
+    annotate_model: str = "",
+    annotate_api_key: str | None = None,
+    annotate_base_url: str | None = None,
+) -> dict:
     """Search Semantic Scholar by title or DOI and add records to archive or json file.
 
     Pass ``queries`` for non-interactive use; when omitted, titles/DOIs are
-    read interactively until an empty line.
+    read interactively until an empty line. Returns a stats dict with counts
+    of ``added``, ``not_found``, ``duplicates`` and ``annotated`` records.
     """
     target = json_file or archive_path
     print("\nSemantic Scholar Paper Search")
@@ -178,33 +276,50 @@ def search_and_add(
 
     if not queries:
         print("\nNo papers to search.")
-        return
+        return {"added": 0, "not_found": 0, "duplicates": 0, "annotated": 0}
 
     sch = _get_client(api_key)
+
+    norm_code_url = _normalize_code_url(code_url) if code_url else None
+
+    stats = {"added": 0, "not_found": 0, "duplicates": 0, "annotated": 0}
+    added_records: list[dict] = []
+
+    def _search(query: str) -> dict | None:
+        if not query.strip():
+            return None
+        return search_by_title(query, sch) if by == "title" else search_by_doi(query, sch)
 
     if json_file:
         # Flat list mode: save to a standalone JSON file for review
         papers_list = _load_flat_json(json_file)
-        added = 0
         for i, query in enumerate(queries, 1):
             print(f"\n[{i}/{len(queries)}] Searching: {query}")
-            record = search_by_title(query, sch) if by == "title" else search_by_doi(query, sch)
+            record = _search(query)
 
             if not record:
+                stats["not_found"] += 1
                 print("  Not found.")
                 continue
 
             if _is_duplicate(papers_list, record):
+                stats["duplicates"] += 1
                 print(f"  Already exists: {record['title'][:60]}")
                 continue
 
-            papers_list.append(record)
-            added += 1
+            added_records.append(record)
+            stats["added"] += 1
             print(f"  Added: {record['title'][:60]}")
 
-        if added:
+        if added_records:
+            _annotate_records(added_records, stats, annotate, annotate_model,
+                              annotate_api_key, annotate_base_url, categories=None)
+            for record in added_records:
+                _apply_code(record, norm_code_url, stars_style)
+                record.pop("abstract", None)
+                papers_list.append(record)
             _save_flat_json(json_file, papers_list)
-            print(f"\nAdded {added} paper(s) to {json_file}")
+            print(f"\nAdded {stats['added']} paper(s) to {json_file}")
         else:
             print("\nNo new papers were added.")
     else:
@@ -213,7 +328,6 @@ def search_and_add(
         if not isinstance(archive, dict):
             archive = {"papers": archive}
 
-        added = 0
         # Add to the requested category (normalized to an existing spelling),
         # falling back to the first category as before
         if category:
@@ -222,35 +336,47 @@ def search_and_add(
             categories = list(archive.keys())
             target = categories[0] if categories else "papers"
 
+        # Flatten all papers across categories for dedup
+        all_papers = []
+        for cat_papers in archive.values():
+            if isinstance(cat_papers, list):
+                all_papers.extend(cat_papers)
+
+        categories = list(archive.keys())
+
         for i, query in enumerate(queries, 1):
             print(f"\n[{i}/{len(queries)}] Searching: {query}")
-            record = search_by_title(query, sch) if by == "title" else search_by_doi(query, sch)
+            record = _search(query)
 
             if not record:
+                stats["not_found"] += 1
                 print("  Not found.")
                 continue
 
-            # Flatten all papers across categories for dedup
-            all_papers = []
-            for cat_papers in archive.values():
-                if isinstance(cat_papers, list):
-                    all_papers.extend(cat_papers)
-
             if _is_duplicate(all_papers, record):
+                stats["duplicates"] += 1
                 print(f"  Already exists: {record['title'][:60]}")
                 continue
 
-            if target not in archive:
-                archive[target] = []
-            archive[target].append(record)
-            added += 1
+            added_records.append(record)
+            stats["added"] += 1
             print(f"  Added: {record['title'][:60]}")
 
-        if added:
+        if added_records:
+            _annotate_records(added_records, stats, annotate, annotate_model,
+                              annotate_api_key, annotate_base_url, categories=categories)
+            if target not in archive:
+                archive[target] = []
+            for record in added_records:
+                _apply_code(record, norm_code_url, stars_style)
+                record.pop("abstract", None)
+                archive[target].append(record)
             _save_archive(archive_path, archive)
-            print(f"\nAdded {added} paper(s) to {archive_path}")
+            print(f"\nAdded {stats['added']} paper(s) to {archive_path}")
         else:
             print("\nNo new papers were added.")
+
+    return stats
 
 
 def add_interactive(archive_path: str, categories: list[str] | None = None) -> None:

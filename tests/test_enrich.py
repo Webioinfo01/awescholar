@@ -650,3 +650,104 @@ def test_enrich_archive_mode_unchanged():
         assert stats["refreshed"] == 1
         assert stats["resolved"] == 0
 
+
+# ── only / stars_style ────────────────────────────────────────
+
+def test_enrich_only_scopes_resolve_and_refresh():
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "data.json")
+        _write_archive(path, {"AI Agents": [
+            {"year": "2025.01", "title": "BioAgent Paper", "doi": "10.1/a", "codeUrl": "",
+             "paperUrl": "https://arxiv.org/abs/2501.04227"},
+            {"year": "2025.02", "title": "Other Paper", "doi": "10.1/b", "codeUrl": ""},
+            {"year": "2025.03", "title": "Known Repo", "doi": "10.1/c",
+             "codeUrl": "https://github.com/x/repo", "githubStars": ""},
+        ]})
+
+        with patch("awescholar.enrich.search_repositories",
+                   side_effect=lambda q, t, per_page=5: [_repo("x/BioAgent", description="Code for arXiv:2501.04227")] if "BioAgent" in q else []), \
+             patch("awescholar.enrich.fetch_repo", return_value={"stargazers_count": 99}):
+            stats = enrich_archive(path, token=None, only=["BioAgent"], no_backup=True)
+
+        papers = _read_archive(path)["AI Agents"]
+        assert papers[0]["codeUrl"] == "https://github.com/x/BioAgent"
+        assert papers[1]["codeUrl"] == ""  # not resolved
+        assert papers[2]["githubStars"] == ""  # not refreshed
+        assert stats["resolved"] == 1
+        assert stats["refreshed"] == 0
+
+
+def test_enrich_badge_style_writes_shields_url_after_resolve():
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "data.json")
+        _write_archive(path, {"AI Agents": [{
+            "year": "2025.01", "title": "BioAgent: an agent for biology",
+            "paperUrl": "https://arxiv.org/abs/2501.04227", "doi": "",
+        }]})
+
+        repo = _repo("x/BioAgent", description="Code for arXiv:2501.04227", stars=17)
+
+        with patch("awescholar.enrich.search_repositories",
+                   side_effect=lambda q, t, per_page=5: [repo]), \
+             patch("awescholar.enrich.fetch_repo", return_value=None):
+            stats = enrich_archive(path, token=None, stars_style="badge", no_backup=True)
+
+        paper = _read_archive(path)["AI Agents"][0]
+        assert paper["codeUrl"] == "https://github.com/x/BioAgent"
+        assert paper["githubStars"] == "https://img.shields.io/github/stars/x/BioAgent"
+        assert stats["resolved"] == 1
+
+
+def test_enrich_badge_style_preserves_existing_same_repo_badge():
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "data.json")
+        _write_archive(path, {"AI Agents": [
+            {"year": "2025.01", "title": "Paper", "doi": "10.1/a",
+             "codeUrl": "https://github.com/x/repo",
+             "githubStars": "https://img.shields.io/github/stars/x/repo"},
+        ]})
+
+        with patch("awescholar.enrich.search_repositories", return_value=[]), \
+             patch("awescholar.enrich.fetch_repo", return_value={"stargazers_count": 99}):
+            stats = enrich_archive(path, token=None, stars_style="badge", no_backup=True)
+
+        paper = _read_archive(path)["AI Agents"][0]
+        assert paper["githubStars"] == "https://img.shields.io/github/stars/x/repo"
+        assert stats["refreshed"] == 0
+
+
+def test_enrich_badge_style_replaces_numeric_value():
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "data.json")
+        _write_archive(path, {"AI Agents": [
+            {"year": "2025.01", "title": "Paper", "doi": "10.1/a",
+             "codeUrl": "https://github.com/x/repo",
+             "githubStars": 42},
+        ]})
+
+        with patch("awescholar.enrich.search_repositories", return_value=[]), \
+             patch("awescholar.enrich.fetch_repo", return_value={"stargazers_count": 99}):
+            stats = enrich_archive(path, token=None, stars_style="badge", no_backup=True)
+
+        paper = _read_archive(path)["AI Agents"][0]
+        assert paper["githubStars"] == "https://img.shields.io/github/stars/x/repo"
+        assert stats["refreshed"] == 1
+
+
+def test_enrich_numeric_style_still_rewrites_badge_to_int():
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "data.json")
+        _write_archive(path, {"AI Agents": [
+            {"year": "2025.01", "title": "Paper", "doi": "10.1/a",
+             "codeUrl": "https://github.com/x/repo",
+             "githubStars": "https://img.shields.io/github/stars/x/repo"},
+        ]})
+
+        with patch("awescholar.enrich.search_repositories", return_value=[]), \
+             patch("awescholar.enrich.fetch_repo", return_value={"stargazers_count": 99}):
+            stats = enrich_archive(path, token=None, stars_style="numeric", no_backup=True)
+
+        paper = _read_archive(path)["AI Agents"][0]
+        assert paper["githubStars"] == 99
+        assert stats["refreshed"] == 1
+

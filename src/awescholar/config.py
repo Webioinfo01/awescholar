@@ -112,6 +112,7 @@ def load_config(path: str | None) -> dict:
     filt = raw.get("filter", {})
     output = raw.get("output", {})
     pipe = raw.get("pipeline", {})
+    archive = raw.get("archive", {})
     model_profiles = raw.get("model_profiles") or {}
 
     profile_name = model.get("profile")
@@ -147,6 +148,11 @@ def load_config(path: str | None) -> dict:
         "merge_new_to_old": pipe.get("merge_new_to_old", False),
         "data_json_path": pipe.get("data_json_path"),
         "categories": raw.get("categories"),
+        # Shape convention for githubStars in the project archive: "numeric"
+        # (bare int, refreshed by updater enrich) or "badge" (shields.io URL —
+        # the Awesome-AI-Meets-Biology convention; enrich then writes badge
+        # URLs and never rewrites them to ints).
+        "stars_style": archive.get("stars_style", "numeric"),
     }
 
 

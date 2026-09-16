@@ -278,3 +278,25 @@ def test_export_no_validation_without_snapshot():
                       status_cb=lambda *a: warnings.append(a))
 
         assert not any("Warning:" in str(w) for w in warnings)
+
+
+def test_emit_commands_writes_intake_script():
+    with tempfile.TemporaryDirectory() as tmp:
+        archive = os.path.join(tmp, "data.json")
+        out = os.path.join(tmp, "intake.sh")
+        with open(archive, "w", encoding="utf-8") as f:
+            json.dump({"AI Agents": [_paper()]}, f)
+
+        stats = export_agentx(archive, out, token=None, emit="commands",
+                              status_cb=lambda *_: None)
+
+        with open(out, encoding="utf-8") as f:
+            text = f.read()
+        assert text.startswith("#!/usr/bin/env bash")
+        assert ("pnpm agent:add SamuelSchmidgall/AgentLaboratory "
+                "--category platforms --name AgentLaboratory") in text
+        assert "--paper https://arxiv.org/abs/2501.04227" in text
+        # no token -> no repo description -> no --description flag emitted
+        assert "--description" not in text
+        assert stats["exported"] == 1
+        assert os.access(out, os.X_OK)

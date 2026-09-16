@@ -51,6 +51,9 @@
         "merge_new_to_old": false,
         "data_json_path": null
     },
+    "archive": {
+        "stars_style": "numeric"
+    },
     "categories": [
         "Foundation Models",
         "AI Agents",

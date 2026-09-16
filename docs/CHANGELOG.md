@@ -11,6 +11,17 @@ Monthly-report workflow — `crawler run --month` replaces copy-a-config-per-mon
 - The default report filename is `{db_path}/report.md` instead of `research_report_{model}.md` — the model name moves into a provenance comment at the top of every report (`<!-- awescholar <version> · model: ... · scope: ... -->`), so per-month report paths are stable across model changes
 - The filter step now gates on scope before quality: papers whose subject falls outside the research interests (sharing a technique like an LLM but applied in an unrelated domain) are excluded regardless of venue prestige, the annotator-assigned `domain` is sent to the filterer as an off-scope signal, and `filter.limit` is an upper bound rather than a quota — fewer selections is a normal outcome, ending the traffic-prediction-in-a-biology-report failure mode
 
+Single-paper curation pass — DOI-first paper links, `--code-url` and `--annotate` on `updater search`, `--only` scoping on enrich/backfill/citations, the `archive.stars_style` config convention, and `--emit commands` for agentx intake.
+
+### Highlights
+
+- `updater search` writes `paperUrl` as the DOI link (`https://doi.org/…`) whenever the paper has a DOI — the Semantic Scholar page URL is the last-resort fallback, never the first choice
+- New `updater search --code-url owner/repo --annotate`: a repo you already know goes straight into `codeUrl` (skipping GitHub discovery; with `archive.stars_style: "badge"` the shields.io URL lands in `githubStars` too), and the configured annotator LLM fills the one-line `domain` of just the added papers — the same annotator the crawler pipeline uses, one batch call, LLM failure never loses the added records
+- New `--only "DOI or title substring"` (repeatable) scopes `updater enrich`, `updater backfill`, and `updater citations` to matching entries — topping up one entry no longer rewrites the whole archive (backfill's trusted-name map still spans the whole archive)
+- New config `archive.stars_style`: `numeric` (default) keeps refreshing bare ints and migrating legacy badge values; `badge` makes enrich write shields.io URLs and never rewrite an existing badge to a number — the Awesome-AI-Meets-Biology star convention is now config, not documentation; `--stars-style` overrides per run
+- New `updater export-agentx --emit commands`: writes an executable `pnpm agent:add owner/repo --category … --name … --paper …` script instead of candidate JSON — the last mile into an agentx repo, where the target's own `agent:add` still validates categories and the tag registry (tags are deliberately not emitted)
+- `updater search --archive` and `updater update --direction new2old` print the natural next step (`updater counts` / `updater rss`) after papers land, so README counts and the RSS feed never silently go stale
+
 
 ## v0.2.2
 

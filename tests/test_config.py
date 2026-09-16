@@ -291,3 +291,24 @@ def test_warn_missing_ss_key_writes_actionable_hint_to_stderr(capsys):
     assert "no Semantic Scholar API key" in err
     assert "anonymous free tier" in err
     assert "SEMANTIC_SCHOLAR_API_KEY" in err
+
+
+def test_load_config_defaults_stars_style_to_numeric(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    config = load_config(None)
+
+    assert config["stars_style"] == "numeric"
+
+
+def test_load_config_reads_archive_stars_style(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    config_path = tmp_path / "config.json"
+    config_path.write_text(
+        json.dumps({"archive": {"stars_style": "badge"}}),
+        encoding="utf-8",
+    )
+
+    config = load_config(str(config_path))
+
+    assert config["stars_style"] == "badge"

@@ -10,6 +10,7 @@ import pytest
 from awescholar.record import (
     _is_duplicate,
     _load_flat_json,
+    _normalize_code_url,
     _save_flat_json,
     search_and_add,
 )
@@ -261,3 +262,119 @@ def test_search_and_add_queries_dedup_against_archive(MockSS):
         with open(archive) as f:
             data = json.load(f)
         assert len(data["AI Agents"]) == 1
+
+
+# ── paperUrl normalization ────────────────────────────────────
+
+@patch("awescholar.record.SemanticScholar")
+def test_paper_url_prefers_doi_over_s2_url(MockSS):
+    """A DOI record's paperUrl is the canonical DOI link, not the S2 page URL."""
+    mock_client = MagicMock()
+    MockSS.return_value = mock_client
+    mock_client.search_paper.return_value = _mock_paper(title="Doi Paper", doi="10.1/doi")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        json_file = os.path.join(tmp, "papers.json")
+        search_and_add(json_file=json_file, by="title", queries=["Doi Paper"])
+        with open(json_file) as f:
+            papers = json.load(f)
+        assert papers[0]["paperUrl"] == "https://doi.org/10.1/doi"
+
+
+@patch("awescholar.record.SemanticScholar")
+def test_paper_url_falls_back_to_s2_url_when_no_doi(MockSS):
+    """Without a DOI, paperUrl falls back to the Semantic Scholar page URL."""
+    mock_client = MagicMock()
+    MockSS.return_value = mock_client
+    paper = _mock_paper(title="No Doi Paper", doi="")
+    mock_client.search_paper.return_value = paper
+
+    with tempfile.TemporaryDirectory() as tmp:
+        json_file = os.path.join(tmp, "papers.json")
+        search_and_add(json_file=json_file, by="title", queries=["No Doi Paper"])
+        with open(json_file) as f:
+            papers = json.load(f)
+        assert papers[0]["paperUrl"] == paper.url
+
+
+# ── code_url / stars_style ────────────────────────────────────
+
+def test_normalize_code_url_shorthand():
+    assert _normalize_code_url("owner/repo") == "https://github.com/owner/repo"
+
+
+@patch("awescholar.record.SemanticScholar")
+def test_code_url_shorthand_and_badge_stars(MockSS):
+    """owner/repo shorthand becomes a full github URL; badge style writes shields URL."""
+    mock_client = MagicMock()
+    MockSS.return_value = mock_client
+    mock_client.search_paper.return_value = _mock_paper(title="Code Paper", doi="10.1/code")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        json_file = os.path.join(tmp, "papers.json")
+        search_and_add(json_file=json_file, by="title", queries=["Code Paper"],
+                       code_url="owner/repo", stars_style="badge")
+        with open(json_file) as f:
+            papers = json.load(f)
+        assert papers[0]["codeUrl"] == "https://github.com/owner/repo"
+        assert papers[0]["githubStars"] == "https://img.shields.io/github/stars/owner/repo"
+
+
+@patch("awescholar.record.SemanticScholar")
+def test_numeric_style_leaves_github_stars_empty(MockSS):
+    """Default numeric style does not touch githubStars even when codeUrl is set."""
+    mock_client = MagicMock()
+    MockSS.return_value = mock_client
+    mock_client.search_paper.return_value = _mock_paper(title="Num Paper", doi="10.1/num")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        json_file = os.path.join(tmp, "papers.json")
+        search_and_add(json_file=json_file, by="title", queries=["Num Paper"],
+                       code_url="owner/repo")
+        with open(json_file) as f:
+            papers = json.load(f)
+        assert papers[0]["codeUrl"] == "https://github.com/owner/repo"
+        assert papers[0]["githubStars"] == ""
+
+
+# ── annotate ──────────────────────────────────────────────────
+
+@patch("awescholar.pipeline.run_annotate")
+@patch("awescholar.record.SemanticScholar")
+def test_annotate_fills_domain_and_strips_abstract(MockSS, mock_run_annotate):
+    """Annotate fills domain from run_annotate and the abstract key is not persisted."""
+    mock_client = MagicMock()
+    MockSS.return_value = mock_client
+    paper = _mock_paper(title="Ann Paper", doi="10.1/ann")
+    paper.abstract = "An abstract."
+    mock_client.search_paper.return_value = paper
+    mock_run_annotate.return_value = {"cat": [{"doi": "10.1/ann", "domain": "AI"}]}
+
+    with tempfile.TemporaryDirectory() as tmp:
+        json_file = os.path.join(tmp, "papers.json")
+        search_and_add(json_file=json_file, by="title", queries=["Ann Paper"],
+                       annotate=True, annotate_model="m", annotate_api_key="k")
+        with open(json_file) as f:
+            papers = json.load(f)
+        assert papers[0]["domain"] == "AI"
+        assert "abstract" not in papers[0]
+        assert papers[0]["doi"] == "10.1/ann"
+
+
+@patch("awescholar.pipeline.run_annotate", side_effect=RuntimeError("LLM boom"))
+@patch("awescholar.record.SemanticScholar")
+def test_annotate_failure_still_saves_record(MockSS, mock_run_annotate):
+    """run_annotate raising must not lose the added record; domain stays empty."""
+    mock_client = MagicMock()
+    MockSS.return_value = mock_client
+    mock_client.search_paper.return_value = _mock_paper(title="Fail Paper", doi="10.1/fail")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        json_file = os.path.join(tmp, "papers.json")
+        search_and_add(json_file=json_file, by="title", queries=["Fail Paper"],
+                       annotate=True, annotate_model="m", annotate_api_key="k")
+        with open(json_file) as f:
+            papers = json.load(f)
+        assert papers[0]["title"] == "Fail Paper"
+        assert papers[0]["domain"] == ""
+        assert "abstract" not in papers[0]

@@ -201,6 +201,8 @@ awescholar --ss-api-key "your-key" crawler search "AI agent" --limit 10
 
 **`search.query`** — 如果设置了，`crawler run` 可以不传 CLI query 参数。
 
+**`archive.stars_style`** — 项目数据 JSON 里 `githubStars` 的形状：`numeric`（默认，裸整数，由 `updater enrich` 刷新）或 `badge`（shields.io URL；enrich 写入 badge URL 且绝不降级成数字）。
+
 支持的 LLM 提供商：任何 OpenAI 兼容 API（通过 `base_url`），如 GLM、DeepSeek、Gemini、Mistral、本地端点。
 
 ## 命令
@@ -245,13 +247,18 @@ awescholar updater search --json-file papers.json --by title   # 搜索并保存
 awescholar updater search --archive data.json --by title       # 搜索并直接添加
 awescholar updater search --archive data.json --category "AI Agents"  # 添加到指定分类
 awescholar updater search --archive data.json --by doi 10.1038/s41467-025-59628-y  # 非交互：DOI 直接作为参数
+awescholar updater search --archive data.json --by doi 10.1038/x --code-url owner/repo --annotate  # 已知 repo + LLM 补写 domain 一句话
 awescholar updater add --archive data.json            # 交互式添加单条记录到项目数据 JSON
 awescholar updater backfill --archive data.json       # 补齐缺失的机构/团队字段（Semantic Scholar + Crossref + OpenAlex）
+awescholar updater backfill --archive data.json --only XunZi   # 只处理 DOI 等于该值或标题含该子串的条目（可重复）
+awescholar updater citations --archive data.json --only "10.1038/x"  # 引用回填同样支持 --only
 awescholar updater enrich --archive data.json         # 从 GitHub 检索补空 codeUrl + 刷新数字 githubStars
 awescholar updater enrich --archive data.json --limit 20 --no-llm  # 最多解析 20 篇，仅启发式匹配
+awescholar updater enrich --archive data.json --only XunZi   # 只解析/刷新匹配的条目
 awescholar updater enrich --archive agents-snapshot.json --agentx  # 刷新 AgentX registry 快照（stars/pushedAt 等；status 等字段严格保留）
 awescholar updater export-agentx --archive data.json -o candidates.json  # 有 GitHub repo 的论文导出为 AgentX 候选 agent
 awescholar updater export-agentx --archive data.json -o c.json --category-map map.json --default-category platforms
+awescholar updater export-agentx --archive data.json -o intake.sh --emit commands  # 输出 pnpm agent:add 录入命令脚本，替代候选 JSON
 
 # 只读查询（reader）——无需 config，绝不修改数据
 awescholar reader query --archive data.json "single cell perturbation"   # 库内关键词检索
@@ -270,9 +277,11 @@ awescholar reader stats --archive data.json --category "AI Agents"   # 单分类
 
 筛选步骤先看选题契合、再看质量：主题落在研究兴趣之外的论文（只是共用 LLM 这类技术、应用在无关领域）无论发表在什么期刊都会被排除；`filter.limit` 是上限不是配额，合格论文不足时就少收。
 
-`updater enrich` 把论文关联到官方 GitHub 仓库。没有 `codeUrl` 的论文会在 GitHub 上分轮检索（先 arXiv ID、再系统名、最后完整标题；一轮候选全部被拒时继续下一轮）；启发式打分只接受有交叉印证的匹配 — repo 名可由论文标题推出、且 repo 自身引用了该 arXiv ID — 难分高下的候选举交配置的 LLM 裁决（`--no-llm` 只用启发式）。已链接 github.com repo 的论文会把 `githubStars` 刷新为数字（旧的 badge URL 值自动迁移，README 渲染器从 repo 地址派生 badge，星数保持实时）。约定用 badge URL 的存档（如 [Awesome-AI-Meets-Biology](https://github.com/Webioinfo01/Awesome-AI-Meets-Biology)）则对每个 GitHub `codeUrl` 在 `githubStars` 里保留 `https://img.shields.io/github/stars/owner/repo`，非 GitHub 的 codeUrl 留空。强烈建议配置 `GITHUB_TOKEN`（config `github.token`、`GITHUB_TOKEN` 环境变量或 `--github-token`）：匿名限额只有每分钟 10 次搜索、每小时 60 次 repo 读取。
+`updater enrich` 把论文关联到官方 GitHub 仓库。没有 `codeUrl` 的论文会在 GitHub 上分轮检索（先 arXiv ID、再系统名、最后完整标题；一轮候选全部被拒时继续下一轮）；启发式打分只接受有交叉印证的匹配 — repo 名可由论文标题推出、且 repo 自身引用了该 arXiv ID — 难分高下的候选举交配置的 LLM 裁决（`--no-llm` 只用启发式）。星数形状是 config 约定而非命令开关：`archive.stars_style: "badge"`（如 [Awesome-AI-Meets-Biology](https://github.com/Webioinfo01/Awesome-AI-Meets-Biology)）时 enrich 往 `githubStars` 写 `https://img.shields.io/github/stars/owner/repo`，且绝不把已有 badge URL 改写成数字；默认 `numeric` 刷新裸整数并迁移旧 badge 值。`--only "DOI 或标题子串"`（可重复）把本次运行限定在匹配的条目 —— `updater backfill` 和 `updater citations` 也有同一面旗 —— 单条补齐不必惊动整个存档。强烈建议配置 `GITHUB_TOKEN`（config `github.token`、`GITHUB_TOKEN` 环境变量或 `--github-token`）：匿名限额只有每分钟 10 次搜索、每小时 60 次 repo 读取。
 
-`updater export-agentx` 把带 github.com repo 的论文导出为 [AgentX](https://github.com/Webioinfo01/agentx-hub) 风格 registry 的候选 agent：输出符合 agentx snapshot 条目结构（slug/name/repo/paperMeta/category + 有 token 时的实时指标），slug 按 agentx 规则生成。用 `--category-map` JSON 文件把存档分类映射到 agentx 分类 slug，未映射的论文落入 `--default-category`；`--categories` 可限定导出的存档分类，`--exclude-snapshot` 跳过已注册的 repo。这里不硬编码任何分类表：指向 agentx snapshot 时以该文件中实际存在的分类为准，映射或默认 slug 缺失会告警（没有 snapshot 就不校验）。输出是给 agentx 录入审阅的队列，不是可直接落地的 snapshot — `--source`/`--source-url` 在每个导出 agent 上记录来源。
+`updater export-agentx` 把带 github.com repo 的论文导出为 [AgentX](https://github.com/Webioinfo01/agentx-hub) 风格 registry 的候选 agent：输出符合 agentx snapshot 条目结构（slug/name/repo/paperMeta/category + 有 token 时的实时指标），slug 按 agentx 规则生成。用 `--category-map` JSON 文件把存档分类映射到 agentx 分类 slug，未映射的论文落入 `--default-category`；`--categories` 可限定导出的存档分类，`--exclude-snapshot` 跳过已注册的 repo。这里不硬编码任何分类表：指向 agentx snapshot 时以该文件中实际存在的分类为准，映射或默认 slug 缺失会告警（没有 snapshot 就不校验）。输出是给 agentx 录入审阅的队列，不是可直接落地的 snapshot — `--source`/`--source-url` 在每个导出 agent 上记录来源。 `--emit commands` 不输出候选 JSON，而是输出一份可执行的 `pnpm agent:add owner/repo --category … --name … --paper …` 命令脚本 —— 进入 agentx 仓库的最后一厘米，分类和标签由目标仓库自己的 agent:add 校验（标签刻意不生成，标签注册表属于目标仓库）。
+
+`updater search` 写规范链接、也能直接携带已知事实：`paperUrl` 优先用 DOI 链接（`https://doi.org/…`）而非 Semantic Scholar 页面；`--code-url owner/repo` 把已知的仓库写进 `codeUrl`（`archive.stars_style: "badge"` 时同时写入 shields.io badge 到 `githubStars`）；`--annotate` 用配置的标注 LLM 为新增论文补写一句话 `domain` —— 与爬虫流水线同一个标注器，只跑新增的几条。论文落库后，`updater search --archive` 和 `updater update --direction new2old` 会打印下一步（`updater counts` / `updater rss`），README 计数和 RSS 不再悄悄过期。
 
 `reader` 命令是策展存档的只读查询面：关键词检索（`query`）、为种子论文找相关工作（`related`，支持 `--input` 喂入粘贴的摘要）、按研究领域生成必读清单（`recommend`，离线或 `--llm`）、存档统计（`stats`）。它们不修改数据、不需要 config，AI agent 可以即时回答"我的库里有哪些关于 X 的论文"。`updater update` 合并时，标题与库内已有条目高度相似的论文（预印本/正式版的典型特征）会被拦到输入文件旁的 `dedupe_review.json`，用 `updater dedupe --keep newer|published|both` 处理，`--no-dedupe` 可跳过检测。
 

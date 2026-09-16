@@ -204,6 +204,10 @@ def cmd_update(args: argparse.Namespace, config: dict) -> int | None:
                   f"--archive {args.archive} --keep newer|published|both")
         else:
             print(f"Merged {added} papers into {args.archive}")
+        if added > 0:
+            print(f"Next  : awescholar updater counts --archive {args.archive}"
+                  "   # website-first README counts (updater readme for table READMEs)")
+            print(f"        awescholar updater rss --archive {args.archive} -o docs/rss.xml")
     elif args.direction == "old2new":
         merge_archive_to_new(new_path, args.archive)
         print(f"Enriched {new_path} with archive papers")
@@ -271,11 +275,28 @@ def cmd_search_record(args: argparse.Namespace, config: dict) -> int | None:
     if not args.archive and not args.json_file:
         print("Error: provide --archive or --json-file")
         return 1
-    search_and_add(
+
+    model = api_key = base_url = None
+    if args.annotate:
+        model, api_key, base_url = resolve_agent_config(config, "annotator")
+        if not api_key:
+            print("Error: --annotate needs a model API key (set --config or AWESCHOLAR_API_KEY).")
+            return 1
+
+    stars_style = args.stars_style or config.get("stars_style") or "numeric"
+    stats = search_and_add(
         archive_path=args.archive, by=args.by,
         api_key=config["ss_api_key"], json_file=args.json_file,
         category=args.category, queries=args.queries or None,
+        code_url=args.code_url, stars_style=stars_style,
+        annotate=args.annotate, annotate_model=model or "",
+        annotate_api_key=api_key, annotate_base_url=base_url,
     )
+
+    if stats["added"] and args.archive:
+        print(f"Next  : awescholar updater counts --archive {args.archive}"
+              "   # website-first README counts (updater readme for table READMEs)")
+        print(f"        awescholar updater rss --archive {args.archive} -o docs/rss.xml")
 
 
 def cmd_backfill(args: argparse.Namespace, config: dict) -> int | None:
@@ -283,7 +304,7 @@ def cmd_backfill(args: argparse.Namespace, config: dict) -> int | None:
 
     backfill_affiliations(
         archive_path=args.archive, api_key=config["ss_api_key"],
-        no_backup=args.no_backup,
+        no_backup=args.no_backup, only=args.only,
     )
 
 
@@ -292,7 +313,7 @@ def cmd_citations(args: argparse.Namespace, config: dict) -> int | None:
 
     stats = backfill_citations(
         archive_path=args.archive, api_key=config["ss_api_key"],
-        no_backup=args.no_backup,
+        no_backup=args.no_backup, only=args.only,
     )
     print(f"\nFilled {stats['filled_citations']}/{stats['candidates']} citation counts")
 
@@ -308,12 +329,14 @@ def cmd_enrich(args: argparse.Namespace, config: dict) -> int | None:
     if not token:
         warn_missing_github_token()
 
+    stars_style = args.stars_style or config.get("stars_style") or "numeric"
     stats = enrich_archive(
         archive_path=args.archive, token=token,
         mode="agentx" if args.agentx else "archive",
         model=model or "", api_key=api_key, base_url=base_url,
         use_llm=not args.no_llm, limit=args.limit,
         no_backup=args.no_backup, status_cb=status,
+        only=args.only, stars_style=stars_style,
     )
     if args.agentx:
         suffix = ""
@@ -345,7 +368,7 @@ def cmd_export_agentx(args: argparse.Namespace, config: dict) -> int | None:
         default_category=args.default_category, source=args.source,
         source_url=args.source_url,
         categories=args.categories.split(",") if args.categories else None,
-        exclude_snapshot=args.exclude_snapshot, status_cb=status,
+        exclude_snapshot=args.exclude_snapshot, emit=args.emit, status_cb=status,
     )
 
 
@@ -590,16 +613,26 @@ def main() -> int:
     p.add_argument("--json-file", type=str, help="Save to a flat JSON list for review (instead of archive)")
     p.add_argument("--by", choices=["title", "doi"], default="title", help="Search by title or DOI (default: title)")
     p.add_argument("--category", type=str, help="Category for added papers (default: first category in archive)")
+    p.add_argument("--code-url", type=str,
+                   help="Known code repo (owner/repo or full URL) written into codeUrl of every added paper")
+    p.add_argument("--stars-style", choices=["badge", "numeric"],
+                   help="githubStars shape for --code-url writes (default: archive.stars_style config, else numeric)")
+    p.add_argument("--annotate", action="store_true",
+                   help="Fill the domain line of added papers with the configured annotator LLM")
 
     p = updater_sub.add_parser("add", help="Interactively add a single record to project data JSON")
     p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")
 
     p = updater_sub.add_parser("backfill", help="Fill missing affiliation/team fields (Semantic Scholar, Crossref, OpenAlex)")
     p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")
+    p.add_argument("--only", action="append",
+                   help="Scope to entries whose DOI equals this or whose title contains it (repeatable)")
     p.add_argument("--no-backup", action="store_true", help="Do not create a backup of the archive before updating")
 
     p = updater_sub.add_parser("citations", help="Fill empty citations fields from Semantic Scholar citationCount")
     p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")
+    p.add_argument("--only", action="append",
+                   help="Scope to entries whose DOI equals this or whose title contains it (repeatable)")
     p.add_argument("--no-backup", action="store_true", help="Do not create a backup of the archive before updating")
 
     p = updater_sub.add_parser("enrich", help="Fill empty codeUrl from GitHub search and refresh githubStars; "
@@ -607,6 +640,10 @@ def main() -> int:
     p.add_argument("--archive", type=str, required=True,
                    help="Path to project data JSON (awesome-list) or, with --agentx, an AgentX snapshot JSON")
     p.add_argument("--limit", type=int, help="Resolve at most N papers without a repo (metrics refresh is unbounded; ignored in --agentx)")
+    p.add_argument("--only", action="append",
+                   help="Scope to entries whose DOI equals this or whose title contains it (repeatable)")
+    p.add_argument("--stars-style", choices=["badge", "numeric"],
+                   help="githubStars shape this archive keeps (default: archive.stars_style config, else numeric)")
     p.add_argument("--no-llm", action="store_true",
                    help="Skip the LLM tiebreak; only unambiguous matches resolve (ignored in --agentx)")
     p.add_argument("--no-backup", action="store_true", help="Do not create a backup of the archive before updating")
@@ -629,6 +666,8 @@ def main() -> int:
                    help="Comma-separated archive categories to export (default: all)")
     p.add_argument("--exclude-snapshot", type=str,
                    help="agentx agents-snapshot.json whose repos are skipped as already registered")
+    p.add_argument("--emit", choices=["json", "commands"], default="json",
+                   help="Output shape: candidate JSON (default) or a shell script of pnpm agent:add intake lines")
 
     p = updater_sub.add_parser("digest", help="Summarize archive papers from one month as a Markdown digest")
     p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")

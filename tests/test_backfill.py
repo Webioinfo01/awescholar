@@ -388,3 +388,97 @@ def test_backfill_citations_no_candidates_is_noop():
 
         assert stats == {"candidates": 0, "filled_citations": 0, "papers_missing": 0}
         assert _read_archive(archive)["AI Agents"][0]["citations"] == 3
+
+
+# ── only scoping ──────────────────────────────────────────────
+
+def test_backfill_only_scopes_affiliation_candidates():
+    with tempfile.TemporaryDirectory() as tmp:
+        archive = os.path.join(tmp, "data.json")
+        _write_archive(archive, {
+            "AI Agents": [
+                {"doi": "10.1/a", "title": "Paper A", "team": "", "affiliation": ""},
+                {"doi": "10.1/b", "title": "Paper B", "team": "", "affiliation": ""},
+            ]
+        })
+        papers = [FakePaper("10.1/a", [FakeAuthorRef("A1", "First Author")])]
+        details = {"A1": FakeAuthorDetail("A1", "First Author", ["Stanford University"])}
+        with _patch_scholar(papers, details):
+            stats = backfill_affiliations(archive, only=["Paper A"], no_backup=True)
+
+        data = _read_archive(archive)
+        assert data["AI Agents"][0]["team"] == "First Author"
+        assert data["AI Agents"][0]["affiliation"] == "Stanford University"
+        assert data["AI Agents"][1]["team"] == ""
+        assert data["AI Agents"][1]["affiliation"] == ""
+        assert stats["candidates"] == 1
+        assert stats["filled_affiliations"] == 1
+
+
+def test_backfill_only_scopes_affiliation_rescans():
+    """Crossref/OpenAlex rescans are also scoped when only is given."""
+    with tempfile.TemporaryDirectory() as tmp:
+        archive = os.path.join(tmp, "data.json")
+        _write_archive(archive, {
+            "AI Agents": [
+                {"doi": "10.1/a", "title": "Paper A", "team": "", "affiliation": ""},
+                {"doi": "10.1/b", "title": "Paper B", "team": "", "affiliation": ""},
+            ]
+        })
+        crossref = {
+            "10.1/a": {"name": "Author A", "affiliations": ["Broad Institute"]},
+            "10.1/b": {"name": "Author B", "affiliations": ["MIT"]},
+        }
+        with _patch_scholar([], {}, crossref):
+            backfill_affiliations(archive, only=["Paper A"], no_backup=True)
+
+        data = _read_archive(archive)
+        assert data["AI Agents"][0]["affiliation"] == "Broad Institute"
+        assert data["AI Agents"][1]["affiliation"] == ""  # not scoped
+
+
+def test_backfill_only_trusted_names_use_whole_archive():
+    """Trusted map must be built from the whole archive, not just scoped entries."""
+    with tempfile.TemporaryDirectory() as tmp:
+        archive = os.path.join(tmp, "data.json")
+        _write_archive(archive, {
+            "AI Agents": [
+                {"doi": "10.1/known", "title": "Known", "team": "Qi Liu",
+                 "affiliation": "MIT"},
+                {"doi": "10.1/target", "title": "Target Paper", "team": "",
+                 "affiliation": ""},
+            ]
+        })
+        papers = [FakePaper("10.1/target", [FakeAuthorRef("A1", "QI LIU")])]
+        details = {"A1": FakeAuthorDetail("A1", "Q. Liu", ["Stanford University"])}
+        with _patch_scholar(papers, details):
+            stats = backfill_affiliations(archive, only=["Target Paper"], no_backup=True)
+
+        entry = _read_archive(archive)["AI Agents"][1]
+        assert entry["team"] == "Qi Liu"  # trusted name from unscoped Known entry
+        assert entry["affiliation"] == "Stanford University"
+        assert stats["reused_trusted"] == 1
+
+
+def test_backfill_only_scopes_citations():
+    with tempfile.TemporaryDirectory() as tmp:
+        archive = os.path.join(tmp, "data.json")
+        _write_archive(archive, {
+            "AI Agents": [
+                {"doi": "10.1/a", "title": "Paper A", "citations": None},
+                {"doi": "10.1/b", "title": "Paper B", "citations": None},
+            ]
+        })
+        papers = [FakeCitationPaper("10.1/a", 42)]
+        client = MagicMock()
+        client.get_papers.side_effect = lambda ids, fields=None, **kw: [
+            p for p in papers if p.externalIds["DOI"] in {i.removeprefix("DOI:") for i in ids}
+        ]
+        with patch("awescholar.backfill.SemanticScholar", return_value=client):
+            stats = backfill_citations(archive, only=["Paper A"], no_backup=True)
+
+        entries = _read_archive(archive)["AI Agents"]
+        assert entries[0]["citations"] == 42
+        assert entries[1]["citations"] is None
+        assert stats["candidates"] == 1
+        assert stats["filled_citations"] == 1

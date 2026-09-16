@@ -25,6 +25,7 @@ from .github import (
     stars_from_repo,
 )
 from .llm import complete
+from .utils import matches_only
 
 AUTO_ACCEPT_SCORE = 5
 SCORE_MARGIN = 2
@@ -285,8 +286,10 @@ def resolve_repo(paper: dict, token: str | None, model: str = "",
 def _enrich_archive_shape(archive_path: str, *, token: str | None, model: str = "",
                           api_key: str | None = None, base_url: str | None = None,
                           use_llm: bool = True, limit: int | None = None,
-                          no_backup: bool = False, status_cb=print) -> dict:
-    """Fill empty codeUrl fields and refresh numeric githubStars in place (awesome-list mode)."""
+                          no_backup: bool = False, status_cb=print,
+                          only: list[str] | None = None,
+                          stars_style: str = "numeric") -> dict:
+    """Fill empty codeUrl fields and refresh githubStars in place (awesome-list mode)."""
     with open(archive_path, "r", encoding="utf-8") as f:
         archive = json.load(f)
 
@@ -294,7 +297,7 @@ def _enrich_archive_shape(archive_path: str, *, token: str | None, model: str = 
     # renders is itself the missing codeUrl.
     for papers in archive.values():
         for p in papers:
-            if not p.get("codeUrl"):
+            if not p.get("codeUrl") and (only is None or matches_only(p, only)):
                 badge = _BADGE_URL_RE.search(str(p.get("githubStars") or ""))
                 if badge:
                     p["codeUrl"] = f"https://github.com/{badge.group(1)}"
@@ -303,18 +306,21 @@ def _enrich_archive_shape(archive_path: str, *, token: str | None, model: str = 
     to_refresh = []  # (category, entry)
     for category, papers in archive.items():
         for p in papers:
-            if not p.get("codeUrl"):
+            if not p.get("codeUrl") and (only is None or matches_only(p, only)):
                 if p.get("title"):
                     to_resolve.append((category, p))
-            elif owner_repo_from_url(p["codeUrl"]):
+            elif owner_repo_from_url(p["codeUrl"]) and (only is None or matches_only(p, only)):
                 to_refresh.append((category, p))
 
+    raw_to_resolve = to_resolve
     if limit is not None:
         to_resolve = to_resolve[:limit]
 
+    scoped_total = len(raw_to_resolve) + len(to_refresh)
+    scoped_note = f"Scoped to {scoped_total} entries (--only). " if only else ""
     llm_ready = use_llm and model and api_key
     status_cb(
-        f"Resolving repositories for {len(to_resolve)} papers, "
+        f"{scoped_note}Resolving repositories for {len(to_resolve)} papers, "
         f"refreshing metrics for {len(to_refresh)} linked repos"
         + ("" if llm_ready else " (LLM tiebreak off — only clear matches resolve)")
     )
@@ -325,7 +331,14 @@ def _enrich_archive_shape(archive_path: str, *, token: str | None, model: str = 
                             api_key if llm_ready else None, base_url)
         if repo:
             p["codeUrl"] = repo.get("html_url") or f"https://github.com/{repo.get('full_name')}"
-            p["githubStars"] = stars_from_repo(repo)
+            if stars_style == "badge":
+                owner_repo = owner_repo_from_url(p["codeUrl"])
+                if owner_repo:
+                    p["githubStars"] = f"https://img.shields.io/github/stars/{owner_repo}"
+                else:
+                    p["githubStars"] = stars_from_repo(repo)
+            else:
+                p["githubStars"] = stars_from_repo(repo)
             resolved += 1
             status_cb(f"  [{i}/{len(to_resolve)}] {repo.get('full_name')}  <-  "
                       f"{str(p.get('title'))[:60]}")
@@ -337,8 +350,18 @@ def _enrich_archive_shape(archive_path: str, *, token: str | None, model: str = 
         owner_repo = owner_repo_from_url(p["codeUrl"])
         repo = fetch_repo(owner_repo, token)
         if repo:
-            p["githubStars"] = stars_from_repo(repo)
-            refreshed += 1
+            if stars_style == "badge":
+                badge_url = f"https://img.shields.io/github/stars/{owner_repo}"
+                existing = str(p.get("githubStars") or "")
+                existing_match = _BADGE_URL_RE.search(existing)
+                if existing_match and existing_match.group(1) == owner_repo:
+                    pass  # already the same-repo badge; leave untouched
+                else:
+                    p["githubStars"] = badge_url
+                    refreshed += 1
+            else:
+                p["githubStars"] = stars_from_repo(repo)
+                refreshed += 1
         else:
             missing += 1
     if to_refresh:
@@ -446,7 +469,9 @@ def _enrich_agentx_snapshot(archive_path: str, *, token: str | None,
 def enrich_archive(archive_path: str, token: str | None = None, *, mode: str = "archive",
                    model: str = "", api_key: str | None = None, base_url: str | None = None,
                    use_llm: bool = True, limit: int | None = None,
-                   no_backup: bool = False, status_cb=print) -> dict:
+                   no_backup: bool = False, status_cb=print,
+                   only: list[str] | None = None,
+                   stars_style: str = "numeric") -> dict:
     """Refresh an archive in place — dispatches on `mode`.
 
     - `mode="archive"` (default, awesome-list): fill empty `codeUrl` from
@@ -461,7 +486,8 @@ def enrich_archive(archive_path: str, token: str | None = None, *, mode: str = "
         return _enrich_archive_shape(
             archive_path, token=token, model=model, api_key=api_key,
             base_url=base_url, use_llm=use_llm, limit=limit,
-            no_backup=no_backup, status_cb=status_cb)
+            no_backup=no_backup, status_cb=status_cb,
+            only=only, stars_style=stars_style)
     if mode == "agentx":
         return _enrich_agentx_snapshot(
             archive_path, token=token, no_backup=no_backup, status_cb=status_cb)
