@@ -63,22 +63,11 @@ def _expand_env_vars(value):
 
 
 def _load_dotenv_files() -> None:
-    """Load project, user, and aweseries dotenv files without replacing existing values.
-
-    Precedence (later files win when a key is already set):
-    1. Project `.env` (cwd) — per-repo overrides
-    2. `~/.config/aweseries/.env` — shared aweseries keyring (SS, GitHub, GLM, …)
-    3. `~/.config/awescholar/.env` — legacy user-level keyring
-    """
+    """Load project and user dotenv files without replacing existing values."""
     project_dotenv = find_dotenv(usecwd=True)
     if project_dotenv:
-        load_dotenv(project_dotenv, override=False)
-    series_dotenv = Path.home() / ".config" / "aweseries" / ".env"
-    if series_dotenv.is_file():
-        load_dotenv(series_dotenv, override=False)
-    legacy_dotenv = Path.home() / ".config" / "awescholar" / ".env"
-    if legacy_dotenv.is_file():
-        load_dotenv(legacy_dotenv, override=False)
+        load_dotenv(project_dotenv)
+    load_dotenv(Path.home() / ".config" / "awescholar" / ".env")
 
 
 def load_config(path: str | None) -> dict:
