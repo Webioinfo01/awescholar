@@ -237,28 +237,30 @@ awescholar crawler run --month 2026-05                # 某个月的完整流水
 awescholar updater update --direction new2old --input X --archive data.json  # 合并到项目数据 JSON（疑似重复会被拦下）
 awescholar updater update --direction new2old --input X --archive data.json --no-dedupe  # 全部合入，跳过重复检测
 awescholar updater dedupe --review output/dedupe_review.json --archive data.json --keep published  # 处理被拦下的重复对
-awescholar updater digest --archive data.json --month 2026-05   # 当月入库论文摘要 -> month_reports/2605/digest.md
-awescholar updater digest --archive data.json --month 2026-05 --no-llm   # 仅表格，无需模型 key
-awescholar updater readme --archive data.json         # 生成 README 表格（自动备份）
-awescholar updater readme --archive data.json --no-backup  # 生成 README 不备份
-awescholar updater counts --archive data.json         # 刷新 website-first README 的论文计数
-awescholar updater rss --archive data.json            # 生成 RSS 订阅
 awescholar updater search --json-file papers.json --by title   # 搜索并保存待审阅
 awescholar updater search --archive data.json --by title       # 搜索并直接添加
 awescholar updater search --archive data.json --category "AI Agents"  # 添加到指定分类
 awescholar updater search --archive data.json --by doi 10.1038/s41467-025-59628-y  # 非交互：DOI 直接作为参数
 awescholar updater search --archive data.json --by doi 10.1038/x --code-url owner/repo --annotate  # 已知 repo + LLM 补写 domain 一句话
 awescholar updater add --archive data.json            # 交互式添加单条记录到项目数据 JSON
-awescholar updater backfill --archive data.json       # 补齐缺失的机构/团队字段（Semantic Scholar + Crossref + OpenAlex）
+awescholar updater backfill --archive data.json       # 补齐缺失的机构/团队/引用数字（Semantic Scholar + Crossref + OpenAlex）
 awescholar updater backfill --archive data.json --only XunZi   # 只处理 DOI 等于该值或标题含该子串的条目（可重复）
-awescholar updater citations --archive data.json --only "10.1038/x"  # 引用回填同样支持 --only
+awescholar updater backfill --archive data.json --fields citations  # 只回填引用数字
 awescholar updater enrich --archive data.json         # 从 GitHub 检索补空 codeUrl + 刷新数字 githubStars
 awescholar updater enrich --archive data.json --limit 20 --no-llm  # 最多解析 20 篇，仅启发式匹配
 awescholar updater enrich --archive data.json --only XunZi   # 只解析/刷新匹配的条目
 awescholar updater enrich --archive agents-snapshot.json --agentx  # 刷新 AgentX registry 快照（stars/pushedAt 等；status 等字段严格保留）
-awescholar updater export-agentx --archive data.json -o candidates.json  # 有 GitHub repo 的论文导出为 AgentX 候选 agent
-awescholar updater export-agentx --archive data.json -o c.json --category-map map.json --default-category platforms
-awescholar updater export-agentx --archive data.json -o intake.sh --emit commands  # 输出 pnpm agent:add 录入命令脚本，替代候选 JSON
+
+# 产物渲染（render）——从项目数据 JSON 派生输出，绝不修改存档
+awescholar render readme --archive data.json         # 生成 README 表格（自动备份）
+awescholar render readme --archive data.json --no-backup  # 生成 README 不备份
+awescholar render counts --archive data.json         # 刷新 website-first README 的论文计数
+awescholar render rss --archive data.json            # 生成 RSS 订阅
+awescholar render digest --archive data.json --month 2026-05   # 当月入库论文摘要 -> month_reports/2605/digest.md
+awescholar render digest --archive data.json --month 2026-05 --no-llm   # 仅表格，无需模型 key
+awescholar render agentx --archive data.json -o candidates.json  # 有 GitHub repo 的论文导出为 AgentX 候选 agent
+awescholar render agentx --archive data.json -o c.json --category-map map.json --default-category platforms
+awescholar render agentx --archive data.json -o intake.sh --emit commands  # 输出 pnpm agent:add 录入命令脚本，替代候选 JSON
 
 # 只读查询（reader）——无需 config，绝不修改数据
 awescholar reader query --archive data.json "single cell perturbation"   # 库内关键词检索
@@ -273,23 +275,23 @@ awescholar reader stats --archive data.json --category "AI Agents"   # 单分类
 
 每个子命令都支持 `--input`（report 用位置参数）指定输入文件，无需重跑完整流水线即可独立执行任意步骤。
 
-`crawler run --month 2026-05` 取代"每月复制一份 config"的做法：一个参数自动推导搜索日期（`2026-05-01:2026-05-31`，闰年自动处理）、输出目录（`month_reports/2605`）和报告文件名（`report.md`），一份入库的基础 config 可服务所有月份。`--month` 与 `--date` 互斥。报告默认写到 `{db_path}/report.md` —— 模型名不再进入文件名，改为写在报告开头的溯源注释里（记录 awescholar 版本、模型、日期范围）。`updater digest --month 2026-05` 是月报的另一面：按 `year` 字段总结 `data.json` 里当月已策展的论文，配置了模型就生成 LLM 叙述，加 `--no-llm` 则输出结构化表格 —— 适合发布与主库实际内容始终一致的月度摘要。
+`crawler run --month 2026-05` 取代"每月复制一份 config"的做法：一个参数自动推导搜索日期（`2026-05-01:2026-05-31`，闰年自动处理）、输出目录（`month_reports/2605`）和报告文件名（`report.md`），一份入库的基础 config 可服务所有月份。`--month` 与 `--date` 互斥。报告默认写到 `{db_path}/report.md` —— 模型名不再进入文件名，改为写在报告开头的溯源注释里（记录 awescholar 版本、模型、日期范围）。`render digest --month 2026-05` 是月报的另一面：按 `year` 字段总结 `data.json` 里当月已策展的论文，配置了模型就生成 LLM 叙述，加 `--no-llm` 则输出结构化表格 —— 适合发布与主库实际内容始终一致的月度摘要。
 
 筛选步骤先看选题契合、再看质量：主题落在研究兴趣之外的论文（只是共用 LLM 这类技术、应用在无关领域）无论发表在什么期刊都会被排除；`filter.limit` 是上限不是配额，合格论文不足时就少收。
 
-`updater enrich` 把论文关联到官方 GitHub 仓库。没有 `codeUrl` 的论文会在 GitHub 上分轮检索（先 arXiv ID、再系统名、最后完整标题；一轮候选全部被拒时继续下一轮）；启发式打分只接受有交叉印证的匹配 — repo 名可由论文标题推出、且 repo 自身引用了该 arXiv ID — 难分高下的候选举交配置的 LLM 裁决（`--no-llm` 只用启发式）。星数形状是 config 约定而非命令开关：`archive.stars_style: "badge"`（如 [Awesome-AI-Meets-Biology](https://github.com/Webioinfo01/Awesome-AI-Meets-Biology)）时 enrich 往 `githubStars` 写 `https://img.shields.io/github/stars/owner/repo`，且绝不把已有 badge URL 改写成数字；默认 `numeric` 刷新裸整数并迁移旧 badge 值。`--only "DOI 或标题子串"`（可重复）把本次运行限定在匹配的条目 —— `updater backfill` 和 `updater citations` 也有同一面旗 —— 单条补齐不必惊动整个存档。强烈建议配置 `GITHUB_TOKEN`（config `github.token`、`GITHUB_TOKEN` 环境变量或 `--github-token`）：匿名限额只有每分钟 10 次搜索、每小时 60 次 repo 读取。
+`updater enrich` 把论文关联到官方 GitHub 仓库。没有 `codeUrl` 的论文会在 GitHub 上分轮检索（先 arXiv ID、再系统名、最后完整标题；一轮候选全部被拒时继续下一轮）；启发式打分只接受有交叉印证的匹配 — repo 名可由论文标题推出、且 repo 自身引用了该 arXiv ID — 难分高下的候选举交配置的 LLM 裁决（`--no-llm` 只用启发式）。星数形状是 config 约定而非命令开关：`archive.stars_style: "badge"`（如 [Awesome-AI-Meets-Biology](https://github.com/Webioinfo01/Awesome-AI-Meets-Biology)）时 enrich 往 `githubStars` 写 `https://img.shields.io/github/stars/owner/repo`，且绝不把已有 badge URL 改写成数字；默认 `numeric` 刷新裸整数并迁移旧 badge 值。`--only "DOI 或标题子串"`（可重复）把本次运行限定在匹配的条目 —— `updater backfill` 也有同一面旗 —— 单条补齐不必惊动整个存档。强烈建议配置 `GITHUB_TOKEN`（config `github.token`、`GITHUB_TOKEN` 环境变量或 `--github-token`）：匿名限额只有每分钟 10 次搜索、每小时 60 次 repo 读取。
 
-`updater export-agentx` 把带 github.com repo 的论文导出为 [AgentX](https://github.com/Webioinfo01/agentx-hub) 风格 registry 的候选 agent：输出符合 agentx snapshot 条目结构（slug/name/repo/paperMeta/category + 有 token 时的实时指标），slug 按 agentx 规则生成。用 `--category-map` JSON 文件把存档分类映射到 agentx 分类 slug，未映射的论文落入 `--default-category`；`--categories` 可限定导出的存档分类，`--exclude-snapshot` 跳过已注册的 repo。这里不硬编码任何分类表：指向 agentx snapshot 时以该文件中实际存在的分类为准，映射或默认 slug 缺失会告警（没有 snapshot 就不校验）。输出是给 agentx 录入审阅的队列，不是可直接落地的 snapshot — `--source`/`--source-url` 在每个导出 agent 上记录来源。 `--emit commands` 不输出候选 JSON，而是输出一份可执行的 `pnpm agent:add owner/repo --category … --name … --paper …` 命令脚本 —— 进入 agentx 仓库的最后一厘米，分类和标签由目标仓库自己的 agent:add 校验（标签刻意不生成，标签注册表属于目标仓库）。
+`render agentx` 把带 github.com repo 的论文导出为 [AgentX](https://github.com/Webioinfo01/agentx-hub) 风格 registry 的候选 agent：输出符合 agentx snapshot 条目结构（slug/name/repo/paperMeta/category + 有 token 时的实时指标），slug 按 agentx 规则生成。用 `--category-map` JSON 文件把存档分类映射到 agentx 分类 slug，未映射的论文落入 `--default-category`；`--categories` 可限定导出的存档分类，`--exclude-snapshot` 跳过已注册的 repo。这里不硬编码任何分类表：指向 agentx snapshot 时以该文件中实际存在的分类为准，映射或默认 slug 缺失会告警（没有 snapshot 就不校验）。输出是给 agentx 录入审阅的队列，不是可直接落地的 snapshot — `--source`/`--source-url` 在每个导出 agent 上记录来源。 `--emit commands` 不输出候选 JSON，而是输出一份可执行的 `pnpm agent:add owner/repo --category … --name … --paper …` 命令脚本 —— 进入 agentx 仓库的最后一厘米，分类和标签由目标仓库自己的 agent:add 校验（标签刻意不生成，标签注册表属于目标仓库）。
 
-`updater search` 写规范链接、也能直接携带已知事实：`paperUrl` 优先用 DOI 链接（`https://doi.org/…`）而非 Semantic Scholar 页面；`--code-url owner/repo` 把已知的仓库写进 `codeUrl`（`archive.stars_style: "badge"` 时同时写入 shields.io badge 到 `githubStars`）；`--annotate` 用配置的标注 LLM 为新增论文补写一句话 `domain` —— 与爬虫流水线同一个标注器，只跑新增的几条。论文落库后，`updater search --archive` 和 `updater update --direction new2old` 会打印下一步（`updater counts` / `updater rss`），README 计数和 RSS 不再悄悄过期。
+`updater search` 写规范链接、也能直接携带已知事实：`paperUrl` 优先用 DOI 链接（`https://doi.org/…`）而非 Semantic Scholar 页面；`--code-url owner/repo` 把已知的仓库写进 `codeUrl`（`archive.stars_style: "badge"` 时同时写入 shields.io badge 到 `githubStars`）；`--annotate` 用配置的标注 LLM 为新增论文补写一句话 `domain` —— 与爬虫流水线同一个标注器，只跑新增的几条。论文落库后，`updater search --archive` 和 `updater update --direction new2old` 会打印下一步（`render counts` / `render rss`），README 计数和 RSS 不再悄悄过期。
 
 `reader` 命令是策展存档的只读查询面：关键词检索（`query`）、为种子论文找相关工作（`related`，支持 `--input` 喂入粘贴的摘要）、按研究领域生成必读清单（`recommend`，离线或 `--llm`）、存档统计（`stats`）。它们不修改数据、不需要 config，AI agent 可以即时回答"我的库里有哪些关于 X 的论文"。`updater update` 合并时，标题与库内已有条目高度相似的论文（预印本/正式版的典型特征）会被拦到输入文件旁的 `dedupe_review.json`，用 `updater dedupe --keep newer|published|both` 处理，`--no-dedupe` 可跳过检测。
 
-`updater readme` 只更新 `<!-- AWESCHOLAR:START -->` 和 `<!-- AWESCHOLAR:END -->` 之间的自动生成区域。这个区域包含 awescholar 生成的目录和分类表格。自定义标题、引用和项目介绍应放在 marker 外。已有 README 如果没有这些 marker，会直接报错，避免整文件覆盖。如果 README 还不存在，`--title` 用来控制生成文件的一级标题。
+`render readme` 只更新 `<!-- AWESCHOLAR:START -->` 和 `<!-- AWESCHOLAR:END -->` 之间的自动生成区域。这个区域包含 awescholar 生成的目录和分类表格。自定义标题、引用和项目介绍应放在 marker 外。已有 README 如果没有这些 marker，会直接报错，避免整文件覆盖。如果 README 还不存在，`--title` 用来控制生成文件的一级标题。
 
-当不指定 `--readme` 时，`updater readme` 会自动发现当前工作目录下所有包含 `<!-- AWESCHOLAR:START -->` 标记的 `README*.md` / `readme*.md` 文件并逐一更新。这适用于维护多语言 README（如 `readme.md` + `README.zh-CN.md`）— 表格内容自动保持同步。
+当不指定 `--readme` 时，`render readme` 会自动发现当前工作目录下所有包含 `<!-- AWESCHOLAR:START -->` 标记的 `README*.md` / `readme*.md` 文件并逐一更新。这适用于维护多语言 README（如 `readme.md` + `README.zh-CN.md`）— 表格内容自动保持同步。
 
-`awescholar init` 一条命令生成完整的 website-first 仓库（类似 [Awesome-AI-Meets-Biology](https://github.com/Webioinfo01/Awesome-AI-Meets-Biology)）：中英双语落地页 README、带搜索和统计的网站（`--template bio` 或 `--template vt`）、接入 `config.json` 的空 `docs/data.json`、RSS 订阅、MPL-2.0 `LICENSE`、`CONTRIBUTING.md` 和 `.gitignore`。`--website` 传入自定义域名时会额外写入 `docs/CNAME`（GitHub Pages 用）。所有选项都可省略：在空目录里裸跑 `awescholar init` 即使用 Awesome-AI-Meets-Biology 的身份和默认值。生成完毕后 init 会默认把 `docs/` 挂到 `http://127.0.0.1:8000/` 供推送前本地检查（页面通过 `fetch` 读取 `data.json`，直接双击打开会因 CORS 加载失败），Ctrl+C 停止，`--no-serve` 跳过，`--port` 换端口。对于论文数据只上网站（README 不内嵌表格）的仓库，合并新论文后运行 `awescholar updater counts --archive docs/data.json`，会刷新 `readme.md` / `README.zh-CN.md` / `README.md`（存在哪个刷哪个，`--readme` 可指定其他文件）里的分类计数、总数和 badge。
+`awescholar init` 一条命令生成完整的 website-first 仓库（类似 [Awesome-AI-Meets-Biology](https://github.com/Webioinfo01/Awesome-AI-Meets-Biology)）：中英双语落地页 README、带搜索和统计的网站（`--template bio` 或 `--template vt`）、接入 `config.json` 的空 `docs/data.json`、RSS 订阅、MPL-2.0 `LICENSE`、`CONTRIBUTING.md` 和 `.gitignore`。`--website` 传入自定义域名时会额外写入 `docs/CNAME`（GitHub Pages 用）。所有选项都可省略：在空目录里裸跑 `awescholar init` 即使用 Awesome-AI-Meets-Biology 的身份和默认值。生成完毕后 init 会默认把 `docs/` 挂到 `http://127.0.0.1:8000/` 供推送前本地检查（页面通过 `fetch` 读取 `data.json`，直接双击打开会因 CORS 加载失败），Ctrl+C 停止，`--no-serve` 跳过，`--port` 换端口。对于论文数据只上网站（README 不内嵌表格）的仓库，合并新论文后运行 `awescholar render counts --archive docs/data.json`，会刷新 `readme.md` / `README.zh-CN.md` / `README.md`（存在哪个刷哪个，`--readme` 可指定其他文件）里的分类计数、总数和 badge。
 
 ## 开发
 
@@ -316,7 +318,7 @@ crawler search -> crawler annotate -> crawler filter -> crawler report
                                   v                                         v
                             data.json                               papers.json（审阅）
                                   |                                         |
-                          updater readme / rss                    updater update new2old
+                          render readme / rss                    updater update new2old
                                                                           |
                                                                           v
                                                                     data.json

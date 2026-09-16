@@ -61,7 +61,7 @@ Steps are composable. Run the full pipeline with `awescholar crawler run` or ind
 
 **Merge model**: `updater update --direction new2old` merges new results into a persistent project data JSON. Category names are matched case-insensitively and separator-insensitively, so `AI Agents`, `ai-agents`, and `ai agents` resolve to the existing category key instead of creating duplicate sections. `old2new` enriches new results with project data entries.
 
-**README update model**: `updater readme` only replaces content between `<!-- AWESCHOLAR:START -->` and `<!-- AWESCHOLAR:END -->`. The generated region contains the awescholar table of contents and category tables. Hand-written headers, citations, and other project text must live outside that generated region. Existing README files without markers fail fast instead of being overwritten.
+**README update model**: `render readme` only replaces content between `<!-- AWESCHOLAR:START -->` and `<!-- AWESCHOLAR:END -->`. The generated region contains the awescholar table of contents and category tables. Hand-written headers, citations, and other project text must live outside that generated region. Existing README files without markers fail fast instead of being overwritten.
 
 ## Data Model
 

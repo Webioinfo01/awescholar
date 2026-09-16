@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+CLI regrouped by first principles — every command that only derives artifacts from the project data JSON moves from `updater` to a new `render` group, and citation backfill folds into `updater backfill`; `updater` is now purely the archive-data lifecycle (12 subcommands → 6).
+
+### Highlights
+
+- New `render` group — `render readme` / `render counts` / `render rss` / `render digest` / `render agentx` (formerly `updater readme`/`counts`/`rss`/`digest`/`export-agentx`) — everything that reads `data.json` and writes a derived artifact; rendering never modifies the archive
+- `updater citations` folds into `updater backfill --fields citations` (repeatable; default fills affiliation/team and citations) — both were fill-empty-fields passes over the same archive, so they share one command
+- `updater` keeps exactly the archive-data lifecycle: `search`, `add`, `update`, `dedupe`, `enrich` (incl. the `--agentx` snapshot refresh), `backfill`
+- The `Next:` hints after `updater search --archive` and `updater update --direction new2old` now point at `render counts` / `render rss`, and the scaffolded CONTRIBUTING.md writes the new names
+- Breaking: the moved and merged names (`updater readme|counts|rss|digest|export-agentx|citations`) are gone without aliases — switch scripts to the `render` names or `backfill --fields citations`; `updater search` and the other retained subcommands are unchanged
+
 Monthly-report workflow — `crawler run --month` replaces copy-a-config-per-month, `updater digest` summarizes a month straight from the archive, report filenames no longer embed the model name, and the filter gates on scope before venue prestige.
 
 ### Highlights

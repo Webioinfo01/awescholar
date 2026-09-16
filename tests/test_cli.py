@@ -208,3 +208,44 @@ def test_updater_digest_fails_actionably_when_month_has_no_papers(tmp_path, caps
     args = argparse.Namespace(archive=str(archive), month="2026-05", output=None, no_llm=True)
     assert cli.cmd_digest(args, _run_config()) == 1
     assert "no papers with year 2026.05" in capsys.readouterr().err
+
+
+def test_updater_help_lists_only_data_mutation_commands():
+    result = _run_cli("updater", "--help")
+    combined = result.stdout + result.stderr
+    assert result.returncode == 0
+    for name in ("search", "add", "update", "dedupe", "enrich", "backfill"):
+        assert name in combined
+    for gone in ("readme", "counts", "rss", "digest", "export-agentx", "citations"):
+        assert gone not in combined
+
+
+def test_render_help_lists_artifact_commands():
+    result = _run_cli("render", "--help")
+    combined = result.stdout + result.stderr
+    assert result.returncode == 0
+    for name in ("readme", "counts", "rss", "digest", "agentx"):
+        assert name in combined
+
+
+def test_backfill_fields_scope_dispatch(tmp_path, monkeypatch):
+    from awescholar import backfill as bf
+    from awescholar import cli
+
+    archive = tmp_path / "data.json"
+    archive.write_text("{}", encoding="utf-8")
+    calls = []
+
+    monkeypatch.setattr(bf, "backfill_affiliations",
+                        lambda **kw: calls.append("affiliation"))
+    monkeypatch.setattr(bf, "backfill_citations",
+                        lambda **kw: calls.append("citations") or {"filled_citations": 0, "candidates": 0})
+
+    args = argparse.Namespace(archive=str(archive), fields=["citations"],
+                               only=None, no_backup=True)
+    cli.cmd_backfill(args, {"ss_api_key": None})
+    assert calls == ["citations"]
+
+    args.fields = None
+    cli.cmd_backfill(args, {"ss_api_key": None})
+    assert calls == ["citations", "affiliation", "citations"]

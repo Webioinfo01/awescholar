@@ -205,9 +205,9 @@ def cmd_update(args: argparse.Namespace, config: dict) -> int | None:
         else:
             print(f"Merged {added} papers into {args.archive}")
         if added > 0:
-            print(f"Next  : awescholar updater counts --archive {args.archive}"
-                  "   # website-first README counts (updater readme for table READMEs)")
-            print(f"        awescholar updater rss --archive {args.archive} -o docs/rss.xml")
+            print(f"Next  : awescholar render counts --archive {args.archive}"
+                  "   # website-first README counts (render readme for table READMEs)")
+            print(f"        awescholar render rss --archive {args.archive} -o docs/rss.xml")
     elif args.direction == "old2new":
         merge_archive_to_new(new_path, args.archive)
         print(f"Enriched {new_path} with archive papers")
@@ -294,28 +294,26 @@ def cmd_search_record(args: argparse.Namespace, config: dict) -> int | None:
     )
 
     if stats["added"] and args.archive:
-        print(f"Next  : awescholar updater counts --archive {args.archive}"
-              "   # website-first README counts (updater readme for table READMEs)")
-        print(f"        awescholar updater rss --archive {args.archive} -o docs/rss.xml")
+        print(f"Next  : awescholar render counts --archive {args.archive}"
+              "   # website-first README counts (render readme for table READMEs)")
+        print(f"        awescholar render rss --archive {args.archive} -o docs/rss.xml")
 
 
 def cmd_backfill(args: argparse.Namespace, config: dict) -> int | None:
-    from .backfill import backfill_affiliations
+    from .backfill import backfill_affiliations, backfill_citations
 
-    backfill_affiliations(
-        archive_path=args.archive, api_key=config["ss_api_key"],
-        no_backup=args.no_backup, only=args.only,
-    )
-
-
-def cmd_citations(args: argparse.Namespace, config: dict) -> int | None:
-    from .backfill import backfill_citations
-
-    stats = backfill_citations(
-        archive_path=args.archive, api_key=config["ss_api_key"],
-        no_backup=args.no_backup, only=args.only,
-    )
-    print(f"\nFilled {stats['filled_citations']}/{stats['candidates']} citation counts")
+    fields = args.fields or ["affiliation", "citations"]
+    if "affiliation" in fields:
+        backfill_affiliations(
+            archive_path=args.archive, api_key=config["ss_api_key"],
+            no_backup=args.no_backup, only=args.only,
+        )
+    if "citations" in fields:
+        stats = backfill_citations(
+            archive_path=args.archive, api_key=config["ss_api_key"],
+            no_backup=args.no_backup, only=args.only,
+        )
+        print(f"\nFilled {stats['filled_citations']}/{stats['candidates']} citation counts")
 
 
 def cmd_enrich(args: argparse.Namespace, config: dict) -> int | None:
@@ -573,7 +571,7 @@ def main() -> int:
                            "db_path (month_reports/YYMM), and the report name (report.md)")
     p.add_argument("-o", "--output", type=str, help="Report output path")
 
-    # updater
+    # updater — every subcommand mutates the project data JSON (or its review files)
     updater = sub.add_parser("updater", help="Archive data management")
     updater_sub = updater.add_subparsers(dest="updater_command")
 
@@ -592,21 +590,6 @@ def main() -> int:
     p.add_argument("--keep", choices=["newer", "published", "both"], required=True,
                    help="newer: latest year wins · published: non-preprint wins · both: keep two entries")
 
-    p = updater_sub.add_parser("readme", help="Generate README tables from project data JSON")
-    p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")
-    p.add_argument("--readme", type=str, help="Output README path")
-    p.add_argument("--title", type=str, help="Project title")
-    p.add_argument("--description", type=str, help="Project description")
-    p.add_argument("--no-backup", action="store_true", help="Do not create a backup of the README before updating")
-
-    p = updater_sub.add_parser("rss", help="Generate RSS feed from project data JSON")
-    p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")
-    p.add_argument("-o", "--output", type=str, help="Output RSS file path")
-    p.add_argument("--title", type=str, help="Feed title")
-    p.add_argument("--link", type=str, help="Channel link URL")
-    p.add_argument("--rss-url", type=str, help="RSS self-link URL")
-    p.add_argument("--description", type=str, help="Channel description")
-
     p = updater_sub.add_parser("search", help="Search Semantic Scholar by title/DOI and add to project data JSON")
     p.add_argument("queries", nargs="*", help="Paper titles or DOIs (omit to enter interactively)")
     p.add_argument("--archive", type=str, help="Path to project data JSON")
@@ -623,20 +606,18 @@ def main() -> int:
     p = updater_sub.add_parser("add", help="Interactively add a single record to project data JSON")
     p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")
 
-    p = updater_sub.add_parser("backfill", help="Fill missing affiliation/team fields (Semantic Scholar, Crossref, OpenAlex)")
+    p = updater_sub.add_parser("backfill", help="Fill empty fields from publication databases "
+                                                "(Semantic Scholar, Crossref, OpenAlex)")
     p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")
+    p.add_argument("--fields", action="append", choices=["affiliation", "citations"], metavar="FIELD",
+                   help="Fill only these fields (repeatable): affiliation = affiliation+team, "
+                        "citations = citation counts (default: both)")
     p.add_argument("--only", action="append",
                    help="Scope to entries whose DOI equals this or whose title contains it (repeatable)")
     p.add_argument("--no-backup", action="store_true", help="Do not create a backup of the archive before updating")
 
-    p = updater_sub.add_parser("citations", help="Fill empty citations fields from Semantic Scholar citationCount")
-    p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")
-    p.add_argument("--only", action="append",
-                   help="Scope to entries whose DOI equals this or whose title contains it (repeatable)")
-    p.add_argument("--no-backup", action="store_true", help="Do not create a backup of the archive before updating")
-
-    p = updater_sub.add_parser("enrich", help="Fill empty codeUrl from GitHub search and refresh githubStars; "
-                                          "with --agentx, refresh an AgentX registry snapshot instead")
+    p = updater_sub.add_parser("enrich", help="Fill empty codeUrl from GitHub search and refresh "
+                                              "githubStars; with --agentx, refresh an AgentX registry snapshot instead")
     p.add_argument("--archive", type=str, required=True,
                    help="Path to project data JSON (awesome-list) or, with --agentx, an AgentX snapshot JSON")
     p.add_argument("--limit", type=int, help="Resolve at most N papers without a repo (metrics refresh is unbounded; ignored in --agentx)")
@@ -652,7 +633,40 @@ def main() -> int:
                         "stars/pushedAt/openIssues/language/license/description/homepage/archived "
                         "and preserve status, slug, paperMeta, category, etc.")
 
-    p = updater_sub.add_parser("export-agentx", help="Export papers with GitHub repos as AgentX candidate agents")
+    # render — derive artifacts from the project data JSON; the archive is never modified
+    render = sub.add_parser("render", help="Render artifacts (README tables, counts, RSS, digests, agentx exports) "
+                                           "from project data JSON")
+    render_sub = render.add_subparsers(dest="render_command")
+
+    p = render_sub.add_parser("readme", help="Generate README tables from project data JSON")
+    p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")
+    p.add_argument("--readme", type=str, help="Output README path")
+    p.add_argument("--title", type=str, help="Project title")
+    p.add_argument("--description", type=str, help="Project description")
+    p.add_argument("--no-backup", action="store_true", help="Do not create a backup of the README before updating")
+
+    p = render_sub.add_parser("counts", help="Refresh website-first README paper counts from project data JSON")
+    p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")
+    p.add_argument("--readme", action="append",
+                   help="README path, repeatable (default: readme.md + README.zh-CN.md in cwd)")
+
+    p = render_sub.add_parser("rss", help="Generate RSS feed from project data JSON")
+    p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")
+    p.add_argument("-o", "--output", type=str, help="Output RSS file path")
+    p.add_argument("--title", type=str, help="Feed title")
+    p.add_argument("--link", type=str, help="Channel link URL")
+    p.add_argument("--rss-url", type=str, help="RSS self-link URL")
+    p.add_argument("--description", type=str, help="Channel description")
+
+    p = render_sub.add_parser("digest", help="Summarize archive papers from one month as a Markdown digest")
+    p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")
+    p.add_argument("--month", type=str, required=True, help="Month to summarize, e.g. 2026-05")
+    p.add_argument("-o", "--output", type=str,
+                   help="Output file (default: month_reports/YYMM/digest.md)")
+    p.add_argument("--no-llm", action="store_true",
+                   help="Skip the LLM narrative; emit tables only (no model key needed)")
+
+    p = render_sub.add_parser("agentx", help="Export papers with GitHub repos as AgentX candidate agents")
     p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")
     p.add_argument("-o", "--output", type=str, required=True, help="Output candidate JSON path")
     p.add_argument("--category-map", type=str,
@@ -668,19 +682,6 @@ def main() -> int:
                    help="agentx agents-snapshot.json whose repos are skipped as already registered")
     p.add_argument("--emit", choices=["json", "commands"], default="json",
                    help="Output shape: candidate JSON (default) or a shell script of pnpm agent:add intake lines")
-
-    p = updater_sub.add_parser("digest", help="Summarize archive papers from one month as a Markdown digest")
-    p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")
-    p.add_argument("--month", type=str, required=True, help="Month to summarize, e.g. 2026-05")
-    p.add_argument("-o", "--output", type=str,
-                   help="Output file (default: month_reports/YYMM/digest.md)")
-    p.add_argument("--no-llm", action="store_true",
-                   help="Skip the LLM narrative; emit tables only (no model key needed)")
-
-    p = updater_sub.add_parser("counts", help="Refresh website-first README paper counts from project data JSON")
-    p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")
-    p.add_argument("--readme", action="append",
-                   help="README path, repeatable (default: readme.md + README.zh-CN.md in cwd)")
 
     # reader
     reader = sub.add_parser("reader", help="Read-only queries over the project data JSON")
@@ -772,13 +773,20 @@ def main() -> int:
             updater.print_help()
             return 0
         handlers = {
-            "update": cmd_update, "readme": cmd_readme, "rss": cmd_rss,
-            "search": cmd_search_record, "add": cmd_add, "backfill": cmd_backfill,
-            "citations": cmd_citations,
-            "counts": cmd_counts, "dedupe": cmd_dedupe, "enrich": cmd_enrich,
-            "export-agentx": cmd_export_agentx, "digest": cmd_digest,
+            "update": cmd_update, "search": cmd_search_record, "add": cmd_add,
+            "dedupe": cmd_dedupe, "backfill": cmd_backfill, "enrich": cmd_enrich,
         }
         return handlers[args.updater_command](args, config) or 0
+
+    if args.command == "render":
+        if not args.render_command:
+            render.print_help()
+            return 0
+        handlers = {
+            "readme": cmd_readme, "counts": cmd_counts, "rss": cmd_rss,
+            "digest": cmd_digest, "agentx": cmd_export_agentx,
+        }
+        return handlers[args.render_command](args, config) or 0
 
     if args.command == "reader":
         if not args.reader_command:

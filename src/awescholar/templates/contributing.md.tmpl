@@ -23,7 +23,7 @@ The agent will automatically execute the following steps:
 1. **Merge** filtered papers into `docs/data.json` — deduplication by DOI, new categories appended, existing entries preserved
 2. **Regenerate** `docs/rss.xml` — channel metadata preserved, only item entries updated
 
-> Note: the README is a website-first landing page. Paper tables are no longer embedded in the README — the website (`docs/index.html` + `docs/data.json`) is the canonical browsing surface. Run `awescholar updater counts` to refresh the paper counts shown in the README.
+> Note: the README is a website-first landing page. Paper tables are no longer embedded in the README — the website (`docs/index.html` + `docs/data.json`) is the canonical browsing surface. Run `awescholar render counts` to refresh the paper counts shown in the README.
 
 ### Method 2: Direct Edit
 
@@ -46,7 +46,7 @@ Add entries to `docs/data.json` following this format:
 }
 ```
 
-`citations` is the Semantic Scholar citation count (integer). It powers the citation badge under Paper on the website. Leave it `null` if unknown; `awescholar updater citations --archive docs/data.json` backfills it.
+`citations` is the Semantic Scholar citation count (integer). It powers the citation badge under Paper on the website. Leave it `null` if unknown; `awescholar updater backfill --fields citations --archive docs/data.json` backfills it.
 
 ### Method 3: Interactive Mode
 
@@ -82,13 +82,13 @@ awescholar updater update --direction new2old --input updater_filter.json --arch
 ### Step 2: Update README counts
 
 ```bash
-awescholar updater counts --archive docs/data.json
+awescholar render counts --archive docs/data.json
 ```
 
 ### Step 3: Generate RSS Feed
 
 ```bash
-awescholar updater rss --archive docs/data.json -o docs/rss.xml
+awescholar render rss --archive docs/data.json -o docs/rss.xml
 ```
 
 All three steps can also be run automatically via the full pipeline:
