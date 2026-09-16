@@ -1,5 +1,7 @@
 """Tests for CLI user-facing behavior."""
 
+import argparse
+import json
 import os
 import socket
 import subprocess
@@ -8,6 +10,20 @@ import time
 import tomllib
 import urllib.request
 from pathlib import Path
+
+
+def _run_config() -> dict:
+    """A load_config() result with every key cmd_run/cmd_digest touch."""
+    return {
+        "model": "openai/test-model", "api_key": None, "base_url": None,
+        "ss_api_key": None, "model_profiles": {}, "agent_models": None,
+        "search_query": None, "publication_date": None, "fields_of_study": None,
+        "limit_search": 50, "limit_filter": 10, "include_abstracts": True,
+        "categories": None, "db_path": "output", "report_filename": None,
+        "skip_search": False, "use_updater_json": False, "use_filtered_json": False,
+        "existing_json_path": None, "merge_new_to_old": False, "data_json_path": None,
+        "research_interests": None,
+    }
 
 
 def _run_cli(*args: str) -> subprocess.CompletedProcess:
@@ -126,3 +142,69 @@ def test_serve_preview_warns_and_skips_when_all_ports_busy(tmp_path, capsys):
         for blocker in blockers:
             blocker.close()
     assert "skipping local preview" in capsys.readouterr().out
+
+
+def test_crawler_run_month_derives_dates_output_dir_and_report_name(tmp_path, monkeypatch):
+    from awescholar import cli, pipeline
+
+    monkeypatch.chdir(tmp_path)
+    captured = {}
+
+    def fake_run_pipeline(**kwargs):
+        captured.update(kwargs)
+        return {}, "# Report"
+
+    monkeypatch.setattr(pipeline, "run_pipeline", fake_run_pipeline)
+
+    args = argparse.Namespace(
+        query="AI agent", month="2026-05", date=None,
+        limit_search=None, limit_filter=None, output=None,
+    )
+    assert cli.cmd_run(args, _run_config()) is None
+
+    assert captured["publication_date_or_year"] == "2026-05-01:2026-05-31"
+    assert captured["db_path"] == "month_reports/2605"
+    report = tmp_path / "month_reports" / "2605" / "report.md"
+    assert report.read_text(encoding="utf-8") == "# Report"
+
+
+def test_crawler_run_rejects_invalid_month(tmp_path, capsys):
+    from awescholar import cli
+
+    args = argparse.Namespace(
+        query="AI agent", month="2026-13", date=None,
+        limit_search=None, limit_filter=None, output=None,
+    )
+    assert cli.cmd_run(args, _run_config()) == 1
+    assert "invalid month" in capsys.readouterr().err
+
+
+def test_updater_digest_writes_default_month_path(tmp_path, monkeypatch):
+    from awescholar import cli
+
+    monkeypatch.chdir(tmp_path)
+    archive = tmp_path / "data.json"
+    archive.write_text(
+        json.dumps({"AI Agents": [{"doi": "10.1/a", "title": "Alpha", "year": "2026.05"}]}),
+        encoding="utf-8",
+    )
+
+    args = argparse.Namespace(archive=str(archive), month="2026-05", output=None, no_llm=True)
+    assert cli.cmd_digest(args, _run_config()) is None
+
+    out = tmp_path / "month_reports" / "2605" / "digest.md"
+    assert "Monthly Research Digest — 2026-05" in out.read_text(encoding="utf-8")
+
+
+def test_updater_digest_fails_actionably_when_month_has_no_papers(tmp_path, capsys):
+    from awescholar import cli
+
+    archive = tmp_path / "data.json"
+    archive.write_text(
+        json.dumps({"AI Agents": [{"doi": "10.1/a", "title": "Alpha", "year": "2026.04"}]}),
+        encoding="utf-8",
+    )
+
+    args = argparse.Namespace(archive=str(archive), month="2026-05", output=None, no_llm=True)
+    assert cli.cmd_digest(args, _run_config()) == 1
+    assert "no papers with year 2026.05" in capsys.readouterr().err

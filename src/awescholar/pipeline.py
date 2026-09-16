@@ -118,6 +118,7 @@ def run_filter(
             {
                 "doi": p["doi"],
                 "title": p["title"],
+                "domain": p.get("domain", ""),
                 "venue": p.get("venue", ""),
                 "affiliation": p.get("affiliation", ""),
             }
@@ -170,18 +171,31 @@ def run_report(
     api_key: str | None = None,
     base_url: str | None = None,
     status_cb: StatusCallback = None,
+    system_prompt: str | None = None,
 ) -> str:
-    """Generate Markdown report from filtered papers."""
+    """Generate Markdown report from filtered papers.
+
+    The returned markdown opens with a provenance comment recording the model
+    and date range, so the report file itself carries its recipe.
+    """
     cb = status_cb or _noop
     cb("Generating report...")
 
+    system = (system_prompt or prompts.REPORTER).replace("{date_range}", date_range)
     result = complete(
-        model=model, system=prompts.REPORTER.replace("{date_range}", date_range),
+        model=model, system=system,
         user=json.dumps(filtered_data, indent=2, ensure_ascii=False, cls=DateEncoder),
         api_key=api_key, base_url=base_url,
     )
     cb("Report generated.")
-    return result
+    return report_provenance(model, date_range) + result
+
+
+def report_provenance(model: str, scope: str) -> str:
+    """HTML comment recording which model and scope produced a report."""
+    from . import __version__
+
+    return f"<!-- awescholar {__version__} · model: {model.split('/')[-1]} · scope: {scope} -->\n\n"
 
 
 def _merge_filtered_to_data(

@@ -98,6 +98,9 @@ awescholar --config config.json crawler run
 
 # Or pass query directly
 awescholar --config config.json crawler run "perturbation prediction|single cell" --date 2025-01-01:2025-05-30
+
+# Monthly report: --month derives the date range, output dir (month_reports/YYMM), and report name
+awescholar --config config.json crawler run --month 2026-05
 ```
 
 Exporting the same variables in `~/.zshrc` also works and takes precedence over the `.env` files; the `.env` keyring is the reliable option when awescholar is invoked from non-interactive shells.
@@ -226,11 +229,14 @@ awescholar crawler filter --input updater.json        # Filter from custom JSON
 awescholar crawler report                             # Generate report (stdout)
 awescholar crawler report updater_filter.json -o report.md  # Report from custom JSON
 awescholar crawler run ["query"]                      # Full pipeline (query optional if set in config)
+awescholar crawler run --month 2026-05                # Full pipeline for one month -> month_reports/2605/report.md
 
 # Archive management
 awescholar updater update --direction new2old --input X --archive data.json  # Merge (suspected duplicates held back)
 awescholar updater update --direction new2old --input X --archive data.json --no-dedupe  # Merge everything, skip duplicate detection
 awescholar updater dedupe --review output/dedupe_review.json --archive data.json --keep published  # Resolve held-back pairs
+awescholar updater digest --archive data.json --month 2026-05   # Digest of the month's archive papers -> month_reports/2605/digest.md
+awescholar updater digest --archive data.json --month 2026-05 --no-llm   # Tables only, no model key needed
 awescholar updater readme --archive data.json         # Generate README tables (with .bak backup)
 awescholar updater readme --archive data.json --no-backup  # Generate README without backup
 awescholar updater counts --archive data.json         # Refresh website-first README paper counts
@@ -260,6 +266,10 @@ awescholar reader stats --archive data.json --category "AI Agents"   # Stats for
 ```
 
 Each subcommand accepts `--input` (or positional `input` for report) to read from a specific file instead of the default path. This lets you re-run any step independently without re-running the full pipeline.
+
+`crawler run --month 2026-05` replaces the copy-a-config-per-month workflow: it derives the search dates (`2026-05-01:2026-05-31`, leap years included), the output directory (`month_reports/2605`), and the report name (`report.md`) from one argument, so a single tracked base config serves every month. `--month` and `--date` are mutually exclusive. The default report filename is `{db_path}/report.md` — the model name no longer leaks into it; instead every report opens with a provenance comment recording the awescholar version, the model, and the date scope. `updater digest --month 2026-05` is the other face of a monthly report: it summarizes the papers already curated in `data.json` for that month (by their `year` field), with an LLM narrative when a model is configured or structured tables with `--no-llm` — useful for publishing a digest that always matches what the archive actually holds.
+
+The filter step gates on scope before quality: papers whose subject falls outside the research interests (a shared technique like an LLM applied in an unrelated domain) are excluded regardless of venue, `filter.limit` is an upper bound rather than a quota, and selecting fewer papers when fewer qualify is the expected outcome.
 
 `updater enrich` links papers to their official GitHub repositories. Papers without a `codeUrl` are searched on GitHub (arXiv ID first, then the leading system name, then the full title — a round whose candidates are all rejected falls through to the next); a heuristic scorer accepts only corroborated matches — a repo name derivable from the paper title plus an arXiv ID cited by the repo itself — and ambiguous races go to the configured LLM for a final verdict (`--no-llm` keeps heuristics only). Papers that already link a github.com repo get `githubStars` refreshed as a numeric count (legacy badge-URL values migrate automatically, and the README renderer derives the badge from the repo, so stars stay live). Archives that prefer badge URLs over numbers — e.g. [Awesome-AI-Meets-Biology](https://github.com/Webioinfo01/Awesome-AI-Meets-Biology) — keep `https://img.shields.io/github/stars/owner/repo` in `githubStars` for every GitHub `codeUrl` and leave the field empty when `codeUrl` is not a GitHub repo. A `GITHUB_TOKEN` is strongly recommended (config `github.token`, `GITHUB_TOKEN` env, or `--github-token`): the anonymous tier allows only 10 searches/minute and 60 repo reads/hour.
 

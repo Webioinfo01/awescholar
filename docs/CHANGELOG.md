@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+Monthly-report workflow — `crawler run --month` replaces copy-a-config-per-month, `updater digest` summarizes a month straight from the archive, report filenames no longer embed the model name, and the filter gates on scope before venue prestige.
+
+### Highlights
+
+- New `crawler run --month 2026-05` (also on `crawler search`; mutually exclusive with `--date`) derives the search dates (`2026-05-01:2026-05-31`, leap years included), the output directory (`month_reports/2605`), and the report name from one argument, overriding `search.publication_date` and `output.db_path` — one tracked base config serves every month, no more hand-copied per-month config files
+- New `updater digest --archive docs/data.json --month 2026-05` summarizes the papers a curated archive holds for one month (matched by the `year` field, `2026.05` and unpadded `2026.5` both match): an LLM narrative when a model is configured, structured tables with `--no-llm` or when no key resolves; output defaults to `month_reports/YYMM/digest.md`, and an empty month fails with an actionable error instead of an empty report
+- The default report filename is `{db_path}/report.md` instead of `research_report_{model}.md` — the model name moves into a provenance comment at the top of every report (`<!-- awescholar <version> · model: ... · scope: ... -->`), so per-month report paths are stable across model changes
+- The filter step now gates on scope before quality: papers whose subject falls outside the research interests (sharing a technique like an LLM but applied in an unrelated domain) are excluded regardless of venue prestige, the annotator-assigned `domain` is sent to the filterer as an off-scope signal, and `filter.limit` is an upper bound rather than a quota — fewer selections is a normal outcome, ending the traffic-prediction-in-a-biology-report failure mode
+
+
 ## v0.2.2
 
 Citation-surface + GitHub-enrichment release — the website shows a citation badge under Paper, `updater search` records carry Semantic Scholar citation counts, `updater citations` fills empty counts, `updater enrich` links papers to their official GitHub repositories with live star counts, and `updater export-agentx` turns repo-backed papers into candidate agents for an AgentX-style registry.
