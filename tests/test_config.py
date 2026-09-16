@@ -192,3 +192,19 @@ def test_warn_missing_ss_key_writes_actionable_hint_to_stderr(capsys):
     assert "no Semantic Scholar API key" in err
     assert "anonymous free tier" in err
     assert "SEMANTIC_SCHOLAR_API_KEY" in err
+
+
+def test_load_config_reads_aweseries_dotenv(monkeypatch, tmp_path):
+    """~/.config/aweseries/.env is loaded as the series-wide keyring."""
+    home = tmp_path / "home"
+    (home / ".config" / "aweseries").mkdir(parents=True)
+    (home / ".config" / "aweseries" / ".env").write_text(
+        "GITHUB_TOKEN=from-aweseries\nSEMANTIC_SCHOLAR_API_KEY=ss-aweseries\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.delenv("SEMANTIC_SCHOLAR_API_KEY", raising=False)
+    config = load_config(None)
+    assert config["github_token"] == "from-aweseries"
+    assert config["ss_api_key"] == "ss-aweseries"
