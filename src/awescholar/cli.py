@@ -314,7 +314,9 @@ def cmd_export_agentx(args: argparse.Namespace, config: dict) -> int | None:
         archive_path=args.archive, output_path=args.output,
         token=config.get("github_token"), category_map=category_map,
         default_category=args.default_category, source=args.source,
-        source_url=args.source_url, status_cb=status,
+        source_url=args.source_url,
+        categories=args.categories.split(",") if args.categories else None,
+        exclude_snapshot=args.exclude_snapshot, status_cb=status,
     )
 
 
@@ -550,6 +552,10 @@ def main() -> int:
     p.add_argument("--source", type=str, default="awescholar",
                    help="Provenance source recorded on exported agents (default: awescholar)")
     p.add_argument("--source-url", type=str, help="Provenance URL recorded on exported agents")
+    p.add_argument("--categories", type=str,
+                   help="Comma-separated archive categories to export (default: all)")
+    p.add_argument("--exclude-snapshot", type=str,
+                   help="agentx agents-snapshot.json whose repos are skipped as already registered")
 
     p = updater_sub.add_parser("counts", help="Refresh website-first README paper counts from project data JSON")
     p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")

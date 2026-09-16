@@ -76,19 +76,36 @@ def _category_for(archive_category: str, category_map: dict,
     return slug
 
 
+def _load_exclude_repos(path: str) -> set[str]:
+    """Lowercased owner/name repos already present in an agentx snapshot file."""
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    entries = data.get("agents", []) if isinstance(data, dict) else data
+    return {str(a.get("repo") or "").lower() for a in entries if a.get("repo")}
+
+
 def export_agentx(archive_path: str, output_path: str, token: str | None = None,
                   category_map: dict | None = None, default_category: str = "platforms",
                   source: str = "awescholar", source_url: str | None = None,
-                  status_cb=print) -> dict:
+                  categories: list[str] | None = None,
+                  exclude_snapshot: str | None = None, status_cb=print) -> dict:
     """Write an AgentX-shaped candidate file from papers with GitHub repos."""
     category_map = category_map or {}
     with open(archive_path, "r", encoding="utf-8") as f:
         archive = json.load(f)
+    if categories is not None:
+        wanted = {c.strip().lower() for c in categories}
+        dropped = [c for c in archive if c.strip().lower() not in wanted]
+        for c in dropped:
+            archive.pop(c)
+        if dropped:
+            status_cb(f"Scoped to {sorted(archive)}; skipped categories: {dropped}")
+    exclude_repos = _load_exclude_repos(exclude_snapshot) if exclude_snapshot else set()
 
     agents = []
     used_slugs: set[str] = set()
     seen_repos: set[str] = set()
-    skipped_no_repo = deduped_repos = 0
+    skipped_no_repo = deduped_repos = excluded_snapshot = 0
 
     for archive_category, papers in archive.items():
         category = _category_for(archive_category, category_map, default_category, status_cb)
@@ -96,6 +113,9 @@ def export_agentx(archive_path: str, output_path: str, token: str | None = None,
             owner_repo = owner_repo_from_url(str(p.get("codeUrl") or ""))
             if not owner_repo:
                 skipped_no_repo += 1
+                continue
+            if owner_repo.lower() in exclude_repos:
+                excluded_snapshot += 1
                 continue
             if owner_repo.lower() in seen_repos:
                 deduped_repos += 1
@@ -139,6 +159,8 @@ def export_agentx(archive_path: str, output_path: str, token: str | None = None,
 
     status_cb(f"Exported {len(agents)} agent candidates to {output_path} "
               f"({skipped_no_repo} papers without a GitHub repo skipped, "
-              f"{deduped_repos} duplicate repos collapsed)")
+              f"{deduped_repos} duplicate repos collapsed"
+              + (f", {excluded_snapshot} repos already in the exclude snapshot"
+                 if excluded_snapshot else "") + ")")
     return {"exported": len(agents), "skipped_no_repo": skipped_no_repo,
-            "deduped_repos": deduped_repos}
+            "deduped_repos": deduped_repos, "excluded_snapshot": excluded_snapshot}

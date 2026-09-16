@@ -173,3 +173,46 @@ def test_export_tolerates_legacy_badge_url_stars():
         with open(out, encoding="utf-8") as f:
             agent = json.load(f)["agents"][0]
         assert agent["stars"] == 0
+
+
+def test_export_scopes_to_requested_categories():
+    with tempfile.TemporaryDirectory() as tmp:
+        archive = os.path.join(tmp, "data.json")
+        out = os.path.join(tmp, "candidates.json")
+        with open(archive, "w", encoding="utf-8") as f:
+            json.dump({
+                "AI Agents": [_paper()],
+                "Foundation models": [_paper(title="A big model",
+                                             codeUrl="https://github.com/a/bigmodel")],
+            }, f)
+
+        export_agentx(archive, out, token=None, categories=["ai agents"],
+                      status_cb=lambda *_: None)
+
+        with open(out, encoding="utf-8") as f:
+            agents = json.load(f)["agents"]
+        assert [a["repo"] for a in agents] == ["SamuelSchmidgall/AgentLaboratory"]
+
+
+def test_export_excludes_repos_from_existing_snapshot():
+    with tempfile.TemporaryDirectory() as tmp:
+        archive = os.path.join(tmp, "data.json")
+        out = os.path.join(tmp, "candidates.json")
+        snapshot = os.path.join(tmp, "agents-snapshot.json")
+        with open(archive, "w", encoding="utf-8") as f:
+            json.dump({
+                "AI Agents": [
+                    _paper(),
+                    _paper(title="New agent", codeUrl="https://github.com/a/newagent"),
+                ],
+            }, f)
+        with open(snapshot, "w", encoding="utf-8") as f:
+            json.dump({"agents": [{"repo": "samuelschmidgall/agentlaboratory"}]}, f)
+
+        stats = export_agentx(archive, out, token=None, exclude_snapshot=snapshot,
+                              status_cb=lambda *_: None)
+
+        with open(out, encoding="utf-8") as f:
+            agents = json.load(f)["agents"]
+        assert [a["repo"] for a in agents] == ["a/newagent"]
+        assert stats["excluded_snapshot"] == 1
