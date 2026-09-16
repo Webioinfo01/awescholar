@@ -139,6 +139,9 @@ Copy `config.example.json` from the [repo root](https://github.com/Webioinfo01/a
     "semantic_scholar": {
         "api_key": "${SEMANTIC_SCHOLAR_API_KEY}"
     },
+    "github": {
+        "token": "${GITHUB_TOKEN}"
+    },
     "search": {
         "query": "AI agent|large language model|foundation model",
         "fields_of_study": ["Biology", "Medicine", "Computer Science"],
@@ -212,6 +215,7 @@ awescholar init --no-zh --no-branding                 # English-only README, no 
 awescholar init --tables                              # Classic mode: also embed README table markers
 awescholar init --no-serve                            # Skip the local preview server (e.g. in scripts)
 awescholar init --port 8123                           # Preview on another port (default: 8000)
+awescholar init --force                               # Proceed even if the target directory is not empty
 
 # Paper discovery pipeline
 awescholar crawler search "query"                     # Search Semantic Scholar
@@ -239,22 +243,25 @@ awescholar updater add --archive data.json            # Interactively add a reco
 awescholar updater backfill --archive data.json       # Fill missing affiliation/team fields (Semantic Scholar + Crossref + OpenAlex)
 awescholar updater enrich --archive data.json         # Fill empty codeUrl from GitHub search + refresh numeric githubStars
 awescholar updater enrich --archive data.json --limit 20 --no-llm  # Resolve at most 20 papers, heuristic matches only
-awescholar updater enrich --archive agents-snapshot.json --agentx  # Refresh an AgentX registry snapshot (stars/pushedAt/openIssues/language/license/description/homepage; status strictly preserved)
+awescholar updater enrich --archive agents-snapshot.json --agentx  # Refresh an AgentX registry snapshot (stars/pushedAt/openIssues/language/license/description/homepage/archived; status strictly preserved)
 awescholar updater export-agentx --archive data.json -o candidates.json  # Papers with GitHub repos as AgentX candidate agents
 awescholar updater export-agentx --archive data.json -o c.json --category-map map.json --default-category platforms
+awescholar updater export-agentx --archive data.json -o c.json --categories "AI Agents,Reviews" --exclude-snapshot agents-snapshot.json  # Scope categories, skip already-registered repos
 
 # Read-only archive queries (reader) — no config needed, never modify data
 awescholar reader query --archive data.json "single cell perturbation"   # Keyword search over the archive
 awescholar reader query --archive data.json "LLM agent" --category "AI Agents" --top 5 --json
 awescholar reader related --archive data.json --doi 10.1/x   # Papers related to one seed (in-archive or external)
+awescholar reader related --archive data.json --title "Some paper title" --top 5 --json  # External seed by title
 awescholar reader recommend --archive data.json --field "AI for biology" --top 10   # Must-read ranking (offline)
 awescholar --config config.json reader recommend --archive data.json --field "..." --llm   # LLM-ranked with reasons
 awescholar reader stats --archive data.json           # Archive statistics
+awescholar reader stats --archive data.json --category "AI Agents"   # Stats for one category (repeatable)
 ```
 
 Each subcommand accepts `--input` (or positional `input` for report) to read from a specific file instead of the default path. This lets you re-run any step independently without re-running the full pipeline.
 
-`updater enrich` links papers to their official GitHub repositories. Papers without a `codeUrl` are searched on GitHub (arXiv ID first, title second); a heuristic scorer accepts only corroborated matches — a repo name derivable from the paper title plus an arXiv ID cited by the repo itself — and ambiguous races go to the configured LLM for a final verdict (`--no-llm` keeps heuristics only). Papers that already link a github.com repo get `githubStars` refreshed as a numeric count (legacy badge-URL values migrate automatically, and the README renderer derives the badge from the repo, so stars stay live). Archives that prefer badge URLs over numbers — e.g. [Awesome-AI-Meets-Biology](https://github.com/Webioinfo01/Awesome-AI-Meets-Biology) — keep `https://img.shields.io/github/stars/owner/repo` in `githubStars` for every GitHub `codeUrl` and leave the field empty when `codeUrl` is not a GitHub repo. A `GITHUB_TOKEN` is strongly recommended (config `github.token`, `GITHUB_TOKEN` env, or `--github-token`): the anonymous tier allows only 10 searches/minute and 60 repo reads/hour.
+`updater enrich` links papers to their official GitHub repositories. Papers without a `codeUrl` are searched on GitHub (arXiv ID first, then the leading system name, then the full title — a round whose candidates are all rejected falls through to the next); a heuristic scorer accepts only corroborated matches — a repo name derivable from the paper title plus an arXiv ID cited by the repo itself — and ambiguous races go to the configured LLM for a final verdict (`--no-llm` keeps heuristics only). Papers that already link a github.com repo get `githubStars` refreshed as a numeric count (legacy badge-URL values migrate automatically, and the README renderer derives the badge from the repo, so stars stay live). Archives that prefer badge URLs over numbers — e.g. [Awesome-AI-Meets-Biology](https://github.com/Webioinfo01/Awesome-AI-Meets-Biology) — keep `https://img.shields.io/github/stars/owner/repo` in `githubStars` for every GitHub `codeUrl` and leave the field empty when `codeUrl` is not a GitHub repo. A `GITHUB_TOKEN` is strongly recommended (config `github.token`, `GITHUB_TOKEN` env, or `--github-token`): the anonymous tier allows only 10 searches/minute and 60 repo reads/hour.
 
 `updater export-agentx` turns archive papers that carry a github.com repo into candidate agents for an [AgentX](https://github.com/Webioinfo01/agentx-hub)-style registry: the output matches the agentx snapshot entry shape (slug/name/repo/paperMeta/category plus live metrics when a token is available), with slugs generated by agentx rules. Map your archive categories to agentx category slugs via a `--category-map` JSON file; unmapped papers fall into `--default-category`. No category list is hardcoded here: when `--exclude-snapshot` points at an agentx snapshot, the categories actually present in that file are the source of truth, and mapped or default slugs missing from it draw a warning (without a snapshot there is no validation). The file is a review queue for agentx intake, not a drop-in snapshot — `source`/`sourceUrl` record provenance on every exported agent.
 
@@ -264,7 +271,7 @@ Each subcommand accepts `--input` (or positional `input` for report) to read fro
 
 When `--readme` is not specified, `updater readme` auto-discovers all `README*.md` / `readme*.md` files in the current working directory that contain `<!-- AWESCHOLAR:START -->` markers and updates each one. This is useful for maintaining multilingual READMEs (e.g., `readme.md` + `README.zh-CN.md`) — the table content stays in sync automatically.
 
-`awescholar init` scaffolds a complete website-first repository — like [Awesome-AI-Meets-Biology](https://github.com/Webioinfo01/Awesome-AI-Meets-Biology) — in one command: bilingual landing-page READMEs, a searchable statistics website (`--template bio` or `--template vt`), an empty `docs/data.json` wired into `config.json`, an RSS feed, MPL-2.0 `LICENSE`, `CONTRIBUTING.md`, and `.gitignore`. A custom `--website` domain also writes `docs/CNAME` for GitHub Pages. All options are optional: bare `awescholar init` in an empty directory uses the Awesome-AI-Meets-Biology identity and defaults. After scaffolding, init serves `docs/` at `http://127.0.0.1:8000/` so you can review the site before pushing (the page fetches `data.json`, so it needs an HTTP server rather than a double-click); stop it with Ctrl+C, skip it with `--no-serve`, or pick another port with `--port`. For repos whose papers live on the website (no embedded tables), run `awescholar updater counts --archive docs/data.json` after merging new papers — it refreshes the per-category counts, totals, and badges in every README it finds.
+`awescholar init` scaffolds a complete website-first repository — like [Awesome-AI-Meets-Biology](https://github.com/Webioinfo01/Awesome-AI-Meets-Biology) — in one command: bilingual landing-page READMEs, a searchable statistics website (`--template bio` or `--template vt`), an empty `docs/data.json` wired into `config.json`, an RSS feed, MPL-2.0 `LICENSE`, `CONTRIBUTING.md`, and `.gitignore`. A custom `--website` domain also writes `docs/CNAME` for GitHub Pages. All options are optional: bare `awescholar init` in an empty directory uses the Awesome-AI-Meets-Biology identity and defaults. After scaffolding, init serves `docs/` at `http://127.0.0.1:8000/` so you can review the site before pushing (the page fetches `data.json`, so it needs an HTTP server rather than a double-click); stop it with Ctrl+C, skip it with `--no-serve`, or pick another port with `--port`. For repos whose papers live on the website (no embedded tables), run `awescholar updater counts --archive docs/data.json` after merging new papers — it refreshes the per-category counts, totals, and badges in `readme.md` / `README.zh-CN.md` / `README.md` (whichever exist in the working directory; pass `--readme` to target other files).
 
 ## Development
 

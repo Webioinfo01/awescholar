@@ -66,6 +66,8 @@ awescholar 由 [aweskill](https://github.com/Webioinfo01/aweskill) 驱动 — �
 - 一键执行完整发现流水线：搜索、标注、筛选、报告
 - 将新结果合并到项目数据 JSON 并重新生成 README
 - 按标题或 DOI 搜索 Semantic Scholar 并添加论文到存档
+- 只读问答策展存档、不改动数据：关键词检索、为粘贴的摘要找相关论文、按领域生成必读清单（`reader query / related / recommend`）
+- 处理合并时被拦下的疑似预印本/正式版重复论文
 - 为策展集合生成 RSS 订阅
 - 独立重新运行任意流水线步骤，支持自定义输入
 
@@ -82,9 +84,14 @@ Agent 通过 [SKILL.md](resources/skills/awescholar/SKILL.md) 理解所有可用
 ### 人类使用
 
 ```bash
-# 设置 API key（添加到 ~/.zshrc 或 ~/.bashrc 可持久保存）
-export GLM_API_KEY="sk-..."
-export SEMANTIC_SCHOLAR_API_KEY="your-key"   # 可选，不设则使用免费 tier
+# 把 API key 一次性存进用户 keyring（推荐 — agent 和 cron 也能读到，
+# 它们的 shell 不会 source ~/.zshrc）：
+mkdir -p ~/.config/awescholar
+cat >> ~/.config/awescholar/.env <<'EOF'
+GLM_API_KEY=sk-...
+SEMANTIC_SCHOLAR_API_KEY=your-key   # 可选，不设则使用免费 tier
+GITHUB_TOKEN=ghp-...                 # 可选，用于 repo enrichment
+EOF
 
 # 运行完整流水线
 awescholar --config config.json crawler run
@@ -93,7 +100,9 @@ awescholar --config config.json crawler run
 awescholar --config config.json crawler run "perturbation prediction|single cell" --date 2025-01-01:2025-05-30
 ```
 
-Semantic Scholar API key 按以下顺序读取：`--ss-api-key` 命令行参数 > config.json 中的 `semantic_scholar.api_key` > 环境变量 `SEMANTIC_SCHOLAR_API_KEY`（兼容旧名 `SEMANTICSCHOLAR_API_KEY`）。 任何地方都找不到 key 时，awescholar 会向 stderr 输出警告并回退到匿名免费 tier。
+在 `~/.zshrc` / `~/.bashrc` 里 export 同名变量也可以，且优先级高于 `.env` 文件；但当 awescholar 从非交互 shell 调用时 rc 文件不会被加载，所以 `.env` keyring 才是可靠选项。
+
+Semantic Scholar API key 按以下顺序读取：`--ss-api-key` 命令行参数 > 项目 config.json 中的 `semantic_scholar.api_key` > `~/.config/awescholar/config.json` 中的 `semantic_scholar.api_key` > 环境变量 `SEMANTIC_SCHOLAR_API_KEY`（兼容旧名 `SEMANTICSCHOLAR_API_KEY`）> `.env` 文件（项目 `.env` > `~/.config/awescholar/.env`）。任何地方都找不到 key 时，awescholar 会向 stderr 输出警告并回退到匿名免费 tier。
 
 ```bash
 awescholar --ss-api-key "your-key" crawler search "AI agent" --limit 10
@@ -103,7 +112,12 @@ awescholar --ss-api-key "your-key" crawler search "AI agent" --limit 10
 
 ## 详细配置
 
-从 [repo 根目录](https://github.com/Webioinfo01/awescholar/blob/main/config.example.json) 复制 `config.example.json` 并填入你的值 — 或直接设置环境变量，跳过配置文件。
+配置分两层解析，按 key 深度合并，项目文件只需覆盖它真正要改的部分：
+
+1. `~/.config/awescholar/config.json` — 全局默认值。把共享的 `model_profiles`、`semantic_scholar`、`github` 条目放这里一次即可。
+2. `--config` 传入的项目配置文件（如 `month_reports/config.json`）— 按项目覆盖：搜索词和日期、filter 设置、输出路径、分类，以及 `model.profile`/`model.name` 的选择。
+
+从 [repo 根目录](https://github.com/Webioinfo01/awescholar/blob/main/config.example.json) 复制 `config.example.json` 到上面任一位置并填入你的值 — 或直接设置环境变量，跳过配置文件。不带 `--config` 运行的命令只使用全局文件，因此 `enrich`、`export-agentx` 这类只依赖 key 的命令可以开箱即用。
 
 ```json
 {
@@ -124,6 +138,9 @@ awescholar --ss-api-key "your-key" crawler search "AI agent" --limit 10
     "agent_models": null,
     "semantic_scholar": {
         "api_key": "${SEMANTIC_SCHOLAR_API_KEY}"
+    },
+    "github": {
+        "token": "${GITHUB_TOKEN}"
     },
     "search": {
         "query": "AI agent|large language model|foundation model",
@@ -198,6 +215,7 @@ awescholar init --no-zh --no-branding                 # 仅英文 README、不�
 awescholar init --tables                              # 经典模式：同时内嵌 README 表格 marker
 awescholar init --no-serve                            # 跳过本地预览服务器（脚本场景）
 awescholar init --port 8123                           # 换预览端口（默认 8000）
+awescholar init --force                               # 目标目录非空时也继续
 
 # 论文发现流水线
 awescholar crawler search "query"                     # 搜索 Semantic Scholar
@@ -219,18 +237,32 @@ awescholar updater counts --archive data.json         # 刷新 website-first REA
 awescholar updater rss --archive data.json            # 生成 RSS 订阅
 awescholar updater search --json-file papers.json --by title   # 搜索并保存待审阅
 awescholar updater search --archive data.json --by title       # 搜索并直接添加
+awescholar updater search --archive data.json --category "AI Agents"  # 添加到指定分类
+awescholar updater search --archive data.json --by doi 10.1038/s41467-025-59628-y  # 非交互：DOI 直接作为参数
 awescholar updater add --archive data.json            # 交互式添加单条记录到项目数据 JSON
+awescholar updater backfill --archive data.json       # 补齐缺失的机构/团队字段（Semantic Scholar + Crossref + OpenAlex）
+awescholar updater enrich --archive data.json         # 从 GitHub 检索补空 codeUrl + 刷新数字 githubStars
+awescholar updater enrich --archive data.json --limit 20 --no-llm  # 最多解析 20 篇，仅启发式匹配
+awescholar updater enrich --archive agents-snapshot.json --agentx  # 刷新 AgentX registry 快照（stars/pushedAt 等；status 等字段严格保留）
+awescholar updater export-agentx --archive data.json -o candidates.json  # 有 GitHub repo 的论文导出为 AgentX 候选 agent
+awescholar updater export-agentx --archive data.json -o c.json --category-map map.json --default-category platforms
 
 # 只读查询（reader）——无需 config，绝不修改数据
 awescholar reader query --archive data.json "single cell perturbation"   # 库内关键词检索
 awescholar reader query --archive data.json "LLM agent" --category "AI Agents" --top 5 --json
 awescholar reader related --archive data.json --doi 10.1/x   # 与某篇种子论文相关的库内论文（外部论文可用 --input）
+awescholar reader related --archive data.json --title "Some paper title" --top 5 --json  # 按标题喂外部种子
 awescholar reader recommend --archive data.json --field "AI for biology" --top 10   # 领域必读排名（离线）
 awescholar --config config.json reader recommend --archive data.json --field "..." --llm   # LLM 排名并给出理由
 awescholar reader stats --archive data.json           # 存档统计
+awescholar reader stats --archive data.json --category "AI Agents"   # 单分类统计（可重复）
 ```
 
 每个子命令都支持 `--input`（report 用位置参数）指定输入文件，无需重跑完整流水线即可独立执行任意步骤。
+
+`updater enrich` 把论文关联到官方 GitHub 仓库。没有 `codeUrl` 的论文会在 GitHub 上分轮检索（先 arXiv ID、再系统名、最后完整标题；一轮候选全部被拒时继续下一轮）；启发式打分只接受有交叉印证的匹配 — repo 名可由论文标题推出、且 repo 自身引用了该 arXiv ID — 难分高下的候选举交配置的 LLM 裁决（`--no-llm` 只用启发式）。已链接 github.com repo 的论文会把 `githubStars` 刷新为数字（旧的 badge URL 值自动迁移，README 渲染器从 repo 地址派生 badge，星数保持实时）。约定用 badge URL 的存档（如 [Awesome-AI-Meets-Biology](https://github.com/Webioinfo01/Awesome-AI-Meets-Biology)）则对每个 GitHub `codeUrl` 在 `githubStars` 里保留 `https://img.shields.io/github/stars/owner/repo`，非 GitHub 的 codeUrl 留空。强烈建议配置 `GITHUB_TOKEN`（config `github.token`、`GITHUB_TOKEN` 环境变量或 `--github-token`）：匿名限额只有每分钟 10 次搜索、每小时 60 次 repo 读取。
+
+`updater export-agentx` 把带 github.com repo 的论文导出为 [AgentX](https://github.com/Webioinfo01/agentx-hub) 风格 registry 的候选 agent：输出符合 agentx snapshot 条目结构（slug/name/repo/paperMeta/category + 有 token 时的实时指标），slug 按 agentx 规则生成。用 `--category-map` JSON 文件把存档分类映射到 agentx 分类 slug，未映射的论文落入 `--default-category`；`--categories` 可限定导出的存档分类，`--exclude-snapshot` 跳过已注册的 repo。这里不硬编码任何分类表：指向 agentx snapshot 时以该文件中实际存在的分类为准，映射或默认 slug 缺失会告警（没有 snapshot 就不校验）。输出是给 agentx 录入审阅的队列，不是可直接落地的 snapshot — `--source`/`--source-url` 在每个导出 agent 上记录来源。
 
 `reader` 命令是策展存档的只读查询面：关键词检索（`query`）、为种子论文找相关工作（`related`，支持 `--input` 喂入粘贴的摘要）、按研究领域生成必读清单（`recommend`，离线或 `--llm`）、存档统计（`stats`）。它们不修改数据、不需要 config，AI agent 可以即时回答"我的库里有哪些关于 X 的论文"。`updater update` 合并时，标题与库内已有条目高度相似的论文（预印本/正式版的典型特征）会被拦到输入文件旁的 `dedupe_review.json`，用 `updater dedupe --keep newer|published|both` 处理，`--no-dedupe` 可跳过检测。
 
@@ -238,7 +270,7 @@ awescholar reader stats --archive data.json           # 存档统计
 
 当不指定 `--readme` 时，`updater readme` 会自动发现当前工作目录下所有包含 `<!-- AWESCHOLAR:START -->` 标记的 `README*.md` / `readme*.md` 文件并逐一更新。这适用于维护多语言 README（如 `readme.md` + `README.zh-CN.md`）— 表格内容自动保持同步。
 
-`awescholar init` 一条命令生成完整的 website-first 仓库（类似 [Awesome-AI-Meets-Biology](https://github.com/Webioinfo01/Awesome-AI-Meets-Biology)）：中英双语落地页 README、带搜索和统计的网站（`--template bio` 或 `--template vt`）、接入 `config.json` 的空 `docs/data.json`、RSS 订阅、MPL-2.0 `LICENSE`、`CONTRIBUTING.md` 和 `.gitignore`。`--website` 传入自定义域名时会额外写入 `docs/CNAME`（GitHub Pages 用）。所有选项都可省略：在空目录里裸跑 `awescholar init` 即使用 Awesome-AI-Meets-Biology 的身份和默认值。生成完毕后 init 会默认把 `docs/` 挂到 `http://127.0.0.1:8000/` 供推送前本地检查（页面通过 `fetch` 读取 `data.json`，直接双击打开会因 CORS 加载失败），Ctrl+C 停止，`--no-serve` 跳过，`--port` 换端口。对于论文数据只上网站（README 不内嵌表格）的仓库，合并新论文后运行 `awescholar updater counts --archive docs/data.json`，会刷新所有 README 里的分类计数、总数和 badge。
+`awescholar init` 一条命令生成完整的 website-first 仓库（类似 [Awesome-AI-Meets-Biology](https://github.com/Webioinfo01/Awesome-AI-Meets-Biology)）：中英双语落地页 README、带搜索和统计的网站（`--template bio` 或 `--template vt`）、接入 `config.json` 的空 `docs/data.json`、RSS 订阅、MPL-2.0 `LICENSE`、`CONTRIBUTING.md` 和 `.gitignore`。`--website` 传入自定义域名时会额外写入 `docs/CNAME`（GitHub Pages 用）。所有选项都可省略：在空目录里裸跑 `awescholar init` 即使用 Awesome-AI-Meets-Biology 的身份和默认值。生成完毕后 init 会默认把 `docs/` 挂到 `http://127.0.0.1:8000/` 供推送前本地检查（页面通过 `fetch` 读取 `data.json`，直接双击打开会因 CORS 加载失败），Ctrl+C 停止，`--no-serve` 跳过，`--port` 换端口。对于论文数据只上网站（README 不内嵌表格）的仓库，合并新论文后运行 `awescholar updater counts --archive docs/data.json`，会刷新 `readme.md` / `README.zh-CN.md` / `README.md`（存在哪个刷哪个，`--readme` 可指定其他文件）里的分类计数、总数和 badge。
 
 ## 开发
 

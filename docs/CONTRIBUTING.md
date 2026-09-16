@@ -73,7 +73,7 @@ Steps are composable. Run the full pipeline with `awescholar crawler run` or ind
 
 Config uses `${ENV_VAR}` expansion. Sensitive values (API keys) must use `${VAR}` syntax in `config.example.json`, never hardcoded. The CLI resolves these from environment variables at load time.
 
-Top-level keys: `model_profiles`, `model`, `agent_models`, `semantic_scholar`, `search`, `filter`, `output`, `pipeline`, `categories`.
+Top-level keys: `model_profiles`, `model`, `agent_models`, `semantic_scholar`, `github`, `search`, `filter`, `output`, `pipeline`, `categories`.
 
 **`model_profiles`**: reusable profile map — each profile defines `api_key` and `base_url`. Referenced by `model.profile` or `agent_models.*.profile`.
 

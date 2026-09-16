@@ -24,7 +24,9 @@ Match the user's intent to a task domain, then follow the workflow below.
 | "Add a paper by title/DOI search" | Updater Search | `awescholar updater search --json-file papers.json` |
 | "Manually add a paper record" | Updater Add | `awescholar updater add --archive data.json` |
 | "Find the GitHub repo for papers", "add code links and stars" | Updater Enrich | `awescholar updater enrich --archive docs/data.json` |
+| "Refresh AgentX registry stats", "update the agentx snapshot" | Updater Enrich-AgentX | `awescholar updater enrich --archive agents-snapshot.json --agentx` |
 | "Backfill citation counts", "fill citations" | Updater Citations | `awescholar updater citations --archive docs/data.json` |
+| "Fill missing affiliations/teams", "补机构信息" | Updater Backfill | `awescholar updater backfill --archive docs/data.json` |
 | "Export papers as agentx agents", "feed the agent registry" | Updater Export-AgentX | `awescholar updater export-agentx --archive docs/data.json -o candidates.json` |
 | "What's in my archive about X", "search my curated papers" | Reader Query | `awescholar reader query --archive docs/data.json "X" --json` |
 | "Papers related to this one", pasted abstract/DOI/title | Reader Related | `awescholar reader related --archive docs/data.json --doi X --json` |
@@ -66,6 +68,8 @@ awescholar init ./my-awesome-list --title "Awesome AI Foo" \
 awescholar init --template vt          # Awesome-AI-Virtual-Tumor style website (default: bio)
 awescholar init --no-zh --no-branding  # English-only README, no ecosystem/support sections
 awescholar init --tables               # also embed classic AWESCHOLAR README table markers
+awescholar init --no-serve --port 8123 # skip the docs/ preview (default port 8000, auto-increments while busy)
+awescholar init --force                # proceed even if the target directory is not empty
 ```
 
 After init: edit `config.json` (model keys, search query), then add papers with `updater add` / `updater search`. For website-first repos (no embedded tables), refresh README counts with `updater counts` after merging papers.
@@ -144,6 +148,8 @@ awescholar updater search --json-file papers.json --by doi
 
 # Search and write directly to project data JSON
 awescholar updater search --archive docs/data.json --by title
+awescholar updater search --archive docs/data.json --category "AI Agents"         # into a specific category
+awescholar updater search --archive docs/data.json --by doi 10.1038/x 10.1038/y  # DOIs as arguments, non-interactive
 
 # Manually add a record (interactive prompt)
 awescholar updater add --archive docs/data.json
@@ -165,6 +171,15 @@ awescholar updater citations --archive docs/data.json --no-backup
 
 Only empty counts are filled; existing values are preserved. Entries need a DOI.
 
+### Updater Backfill
+
+Use when records lack `affiliation`/`team` fields. Consults three sources cheapest-per-coverage first: Semantic Scholar author batches, Crossref per-DOI metadata, OpenAlex curated institutions. Only empty fields are filled, entries never move between categories, and the affiliation always comes from the same author as the team.
+
+```bash
+awescholar updater backfill --archive docs/data.json
+awescholar updater backfill --archive docs/data.json --no-backup
+```
+
 ### Reader (Query · Related · Recommend · Stats)
 
 Use when answering questions **about** the curated archive — the reader face. Read-only, offline, no `--config` needed (except `recommend --llm`). Never use these to modify data; if the user wants to add papers, switch to Updater Search.
@@ -177,6 +192,7 @@ awescholar reader query --archive docs/data.json "LLM agent" --category "AI Agen
 # Papers related to a seed: --doi (must be in archive), --title (external ok),
 # or --input seed.json (exactly one record — write the pasted abstract here)
 awescholar reader related --archive docs/data.json --doi 10.48550/arXiv.2505.23055
+awescholar reader related --archive docs/data.json --title "External paper title"
 awescholar reader related --archive docs/data.json --input seed.json --top 5 --json
 
 # Must-read ranking for a field. Offline by default; --llm adds model-ranked
@@ -184,8 +200,9 @@ awescholar reader related --archive docs/data.json --input seed.json --top 5 --j
 awescholar reader recommend --archive docs/data.json --field "AI for protein design" --top 10
 awescholar --config config.json reader recommend --archive docs/data.json --field "..." --llm --json
 
-# Archive statistics
+# Archive statistics (--category repeatable; default: every category in the archive)
 awescholar reader stats --archive docs/data.json --json
+awescholar reader stats --archive docs/data.json --category "AI Agents"
 ```
 
 Paper-to-precedents flow (user pastes an abstract):
@@ -216,7 +233,8 @@ Use when the repo is website-first (papers live on the website, README shows lin
 
 ```bash
 awescholar updater counts --archive docs/data.json
-# updates readme.md + README.zh-CN.md in cwd; --readme <path> to target specific files
+# updates readme.md / README.zh-CN.md / README.md (whichever exist in cwd);
+# --readme <path> is repeatable to target specific files
 ```
 
 ### Updater RSS
@@ -245,13 +263,18 @@ Decision order:
 
 ### Updater Enrich
 
-Use when papers lack GitHub links or star counts are stale. Fills empty `codeUrl` (GitHub search: arXiv ID first, title second; corroborated heuristic match auto-accept, ambiguous races judged by the configured LLM) and refreshes `githubStars` as a numeric count for every linked repo. Only empty `codeUrl` fields are filled; legacy badge-URL stars migrate automatically. If the project convention is badge URLs (Awesome-AI-Meets-Biology), write `https://img.shields.io/github/stars/owner/repo` into `githubStars` for GitHub `codeUrl` entries and leave it empty for non-GitHub code links.
+Use when papers lack GitHub links or star counts are stale. Fills empty `codeUrl` (GitHub search rounds: arXiv ID, then leading system name, then full title — a round whose candidates all fail falls through to the next; corroborated heuristic match auto-accept, ambiguous races judged by the configured LLM) and refreshes `githubStars` as a numeric count for every linked repo. Only empty `codeUrl` fields are filled; legacy badge-URL stars migrate automatically. If the project convention is badge URLs (Awesome-AI-Meets-Biology), write `https://img.shields.io/github/stars/owner/repo` into `githubStars` for GitHub `codeUrl` entries and leave it empty for non-GitHub code links.
 
 ```bash
 awescholar updater enrich --archive docs/data.json              # resolve + refresh (LLM tiebreak on when configured)
 awescholar updater enrich --archive docs/data.json --limit 20   # cap resolution per run
 awescholar updater enrich --archive docs/data.json --no-llm     # heuristics only
+
+# AgentX mode: refresh an agentx registry snapshot in place (metrics only)
+awescholar updater enrich --archive agents-snapshot.json --agentx
 ```
+
+`--agentx` treats `--archive` as an AgentX registry snapshot (top-level `{agents, counts}`) instead of an awesome-list archive: it refreshes `stars/pushedAt/openIssues/language/license/description/homepage/archived` for every agent repo and strictly preserves every other field (`status`, `slug`, `paperMeta`, category, tags, source), so lifecycle rules stay with the registry's own tooling.
 
 Needs `GITHUB_TOKEN` (config `github.token` > env `GITHUB_TOKEN` > `--github-token`); anonymous limits are 10 searches/min and 60 repo reads/hour. After enriching, regenerate the README so the numeric stars render as live badges.
 
@@ -263,9 +286,11 @@ Use when feeding an agentx-style registry (repo-first agent directory). Exports 
 awescholar updater export-agentx --archive docs/data.json -o candidates.json
 # map archive categories to agentx slugs; unmapped papers land in --default-category
 awescholar updater export-agentx --archive docs/data.json -o candidates.json --category-map map.json --default-category platforms
+# scope to given archive categories; skip repos already registered in a snapshot
+awescholar updater export-agentx --archive docs/data.json -o candidates.json --categories "AI Agents,Reviews" --exclude-snapshot agents-snapshot.json
 ```
 
-Run `updater enrich` first so papers carry their repos and numeric stars.
+No category list is hardcoded: when `--exclude-snapshot` points at an agentx snapshot, the categories actually present in that file are the source of truth — mapped or default slugs missing from it draw a warning (no snapshot means no validation). `--source`/`--source-url` record provenance on every exported agent. Run `updater enrich` first so papers carry their repos and numeric stars.
 
 ## Response Format (reader intents)
 
@@ -290,7 +315,8 @@ When answering a user from reader results, keep the structure stable across sess
     },
     "model": { "profile": "glm", "name": "glm-5.1" },
     "agent_models": null,
-    "semantic_scholar": { "api_key": "${SEMANTICSCHOLAR_API_KEY}" },
+    "semantic_scholar": { "api_key": "${SEMANTIC_SCHOLAR_API_KEY}" },
+    "github": { "token": "${GITHUB_TOKEN}" },
     "search": {
         "query": "AI agent|large language model",
         "fields_of_study": ["Biology", "Medicine"],
@@ -316,6 +342,7 @@ Key fields:
 - **model.base_url**: Required for non-default endpoints. Must be OpenAI-compatible.
 - **model_profiles**: Reusable profile map. Referenced by `model.profile` or `agent_models.*.profile`.
 - **agent_models**: Per-agent overrides for annotator/filterer/reporter. `null` = use global model.
+- **github.token**: GitHub token for `updater enrich` / `export-agentx` live metrics (else env `GITHUB_TOKEN` / `--github-token`).
 - **pipeline.data_json_path**: Long-lived curated project data JSON. When `merge_new_to_old` is true, filtered results auto-merge here after pipeline completes.
 - **pipeline.existing_json_path**: Intermediate annotate output (`updater.json`). Different from `data_json_path`.
 - **pipeline.skip_search / use_updater_json / use_filtered_json**: Flow control — see Crawler Pipeline section.
