@@ -323,19 +323,31 @@ def recommend_with_llm(archive_path: str, field: str, top: int = 10,
 
 # ── stats ────────────────────────────────────────────────────
 
-def stats(archive_path: str) -> dict:
+def stats(archive_path: str, categories: list[str] | None = None) -> dict:
     papers = load_papers(archive_path)
-    categories = {}
+    if categories is not None:
+        wanted = set(categories)
+        papers = [p for p in papers if p.get("category") in wanted]
+
+    counts: dict[str, dict] = {}
     for paper in papers:
-        entry = categories.setdefault(paper.get("category", ""), {"count": 0, "newest": ""})
+        name = paper.get("category", "")
+        entry = counts.setdefault(name, {"count": 0, "newest": ""})
         entry["count"] += 1
         entry["newest"] = max(entry["newest"], paper_year(paper))
+
+    if categories is not None:
+        ordered = [name for name in categories if name in counts]
+    else:
+        ordered = [name for name, _ in sorted(counts.items(),
+                                              key=lambda kv: (-kv[1]["count"], kv[0]))]
+
     years = [paper_year(p) for p in papers if paper_year(p)]
     return {
         "total": len(papers),
         "categories": [
-            {"name": name, **entry}
-            for name, entry in sorted(categories.items(), key=lambda kv: (-kv[1]["count"], kv[0]))
+            {"name": name, **counts[name]}
+            for name in ordered
         ],
         "date_range": [min(years), max(years)] if years else ["", ""],
         "venues": len({p.get("venue") for p in papers if p.get("venue")}),
@@ -440,8 +452,8 @@ def run_recommend(archive_path: str, field: str, top: int = 10, as_json: bool = 
         print("\n  No candidates matched. Try a broader field description.")
 
 
-def run_stats(archive_path: str, as_json: bool = False) -> None:
-    data = stats(archive_path)
+def run_stats(archive_path: str, as_json: bool = False, categories: list[str] | None = None) -> None:
+    data = stats(archive_path, categories=categories)
     if as_json:
         print(json.dumps({"archive": archive_path, **data}, ensure_ascii=False, indent=2))
         return

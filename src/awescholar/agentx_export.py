@@ -6,20 +6,17 @@ entries that carry a github.com codeUrl into that shape, so agentx can review
 and ingest them without a paper-side re-format. Live repo metrics are fetched
 when a token is available; otherwise the exporter falls back to what the
 archive already knows and agentx's own refresh fills the rest.
+
+Category validation is driven entirely by the agentx exclude snapshot when one
+is passed: its agents' `category` values are the source of truth for known
+slugs. With no snapshot there is no validation, since awescholar has no other
+way to know agentx's categories.
 """
 
 import json
 import re
 
 from .github import fetch_repo, owner_repo_from_url, stars_from_repo
-
-# The nine AgentX user-intent category slugs; category labels live on the
-# agentx side, so only slugs are validated here.
-AGENTX_CATEGORIES = (
-    "autonomous-research", "literature-writing", "bio-omics", "chem-drug",
-    "clinical-health", "workbenches", "platforms", "orchestration",
-    "evaluation-safety",
-)
 
 
 def agentx_slugify(text: str) -> str:
@@ -66,23 +63,26 @@ def _paper_url(paper: dict) -> str | None:
 
 
 def _category_for(archive_category: str, category_map: dict,
-                  default_category: str, status_cb) -> str:
+                  default_category: str, known_categories: set[str],
+                  status_cb) -> str:
     slug = category_map.get(archive_category) or category_map.get(
         archive_category.strip().lower())
     if not slug:
         return default_category
-    if slug not in AGENTX_CATEGORIES:
-        status_cb(f"  Warning: '{slug}' is not a known agentx category "
+    if known_categories and slug not in known_categories:
+        status_cb(f"  Warning: '{slug}' is not a category in the agentx snapshot "
                   f"(from '{archive_category}'); keeping it as-is")
     return slug
 
 
-def _load_exclude_repos(path: str) -> set[str]:
-    """Lowercased owner/name repos already present in an agentx snapshot file."""
+def _load_snapshot(path: str) -> tuple[set[str], set[str]]:
+    """Load an agentx snapshot file: repo dedup set and known category slugs."""
     with open(path, "r", encoding="utf-8") as f:
         data = json.load(f)
     entries = data.get("agents", []) if isinstance(data, dict) else data
-    return {str(a.get("repo") or "").lower() for a in entries if a.get("repo")}
+    repos = {str(a.get("repo") or "").lower() for a in entries if a.get("repo")}
+    categories = {str(a["category"]) for a in entries if a.get("category")}
+    return repos, categories
 
 
 def export_agentx(archive_path: str, output_path: str, token: str | None = None,
@@ -101,7 +101,14 @@ def export_agentx(archive_path: str, output_path: str, token: str | None = None,
             archive.pop(c)
         if dropped:
             status_cb(f"Scoped to {sorted(archive)}; skipped categories: {dropped}")
-    exclude_repos = _load_exclude_repos(exclude_snapshot) if exclude_snapshot else set()
+    exclude_repos = set()
+    known_categories = set()
+    if exclude_snapshot:
+        exclude_repos, known_categories = _load_snapshot(exclude_snapshot)
+
+    if known_categories and default_category not in known_categories:
+        status_cb(f"  Warning: '{default_category}' is not a category in the agentx "
+                  f"snapshot; using it as the default fallback")
 
     agents = []
     used_slugs: set[str] = set()
@@ -109,7 +116,8 @@ def export_agentx(archive_path: str, output_path: str, token: str | None = None,
     skipped_no_repo = deduped_repos = excluded_snapshot = 0
 
     for archive_category, papers in archive.items():
-        category = _category_for(archive_category, category_map, default_category, status_cb)
+        category = _category_for(archive_category, category_map, default_category,
+                                 known_categories, status_cb)
         for p in papers:
             owner_repo = owner_repo_from_url(str(p.get("codeUrl") or ""))
             if not owner_repo:

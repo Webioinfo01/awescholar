@@ -358,7 +358,7 @@ def cmd_reader_recommend(args: argparse.Namespace, config: dict) -> int | None:
 def cmd_reader_stats(args: argparse.Namespace, config: dict) -> int | None:
     from .reader import run_stats
 
-    run_stats(args.archive, as_json=args.json)
+    run_stats(args.archive, as_json=args.json, categories=args.category)
 
 
 def _bind_preview_server(docs_dir: str, port: int):
@@ -591,6 +591,8 @@ def main() -> int:
 
     p = reader_sub.add_parser("stats", help="Archive statistics: counts, categories, date range")
     p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")
+    p.add_argument("--category", type=str, action="append",
+                   help="Restrict to one or more categories (default: all categories in the archive)")
     p.add_argument("--json", action="store_true", help="Machine-readable output for agents")
 
     # init
@@ -604,7 +606,7 @@ def main() -> int:
     p.add_argument("--template", choices=["bio", "vt"], default="bio",
                    help="Website template: bio = Awesome-AI-Meets-Biology style, vt = Awesome-AI-Virtual-Tumor style")
     p.add_argument("--category", action="append", dest="category",
-                   help="Category name (repeatable; default: the five Biology categories)")
+                   help="Category name (repeatable; default: Biology-themed starter categories)")
     p.add_argument("--no-zh", action="store_true", help="Skip README.zh-CN.md")
     p.add_argument("--no-branding", action="store_true", help="Skip ecosystem/support sections and Webioinfo links")
     p.add_argument("--tables", action="store_true",

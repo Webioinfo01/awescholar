@@ -198,6 +198,38 @@ def test_stats_counts_and_ranges(archive_path):
     assert data["venues"] == 4 and data["teams"] == 4
 
 
+def test_stats_default_sorts_by_count_desc(tmp_path):
+    """Default stats cover every archive category, biggest first (name tiebreak)."""
+    archive = {"Zebra": [{"year": "2023-01-01", "title": "z1", "team": "t", "domain": "d", "venue": "v"}],
+               "Alpha": [{"year": "2023-02-01", "title": "a1", "team": "t", "domain": "d", "venue": "v"},
+                         {"year": "2023-03-01", "title": "a2", "team": "t", "domain": "d", "venue": "v"}],
+               "Middle": [{"year": "2023-04-01", "title": "m1", "team": "t", "domain": "d", "venue": "v"}]}
+    path = tmp_path / "data.json"
+    path.write_text(json.dumps(archive), encoding="utf-8")
+    data = stats(str(path))
+    names = [c["name"] for c in data["categories"]]
+    assert names == ["Alpha", "Middle", "Zebra"]
+    assert data["total"] == 4
+
+
+def test_stats_category_filter_selects_subset(tmp_path):
+    path = tmp_path / "data.json"
+    path.write_text(json.dumps(ARCHIVE), encoding="utf-8")
+    data = stats(str(path), categories=["Benchmarks", "Reviews"])
+    assert data["total"] == 2
+    names = [c["name"] for c in data["categories"]]
+    assert names == ["Benchmarks", "Reviews"]
+    assert data["categories"][0]["count"] == 1
+
+
+def test_reader_stats_cli_filters_by_category(archive_path):
+    result = _run_cli("reader", "stats", "--archive", archive_path, "--category", "Reviews")
+    assert result.returncode == 0
+    assert "Reviews" in result.stdout
+    assert "AI Agents" not in result.stdout
+    assert "Benchmarks" not in result.stdout
+
+
 # ── CLI ──────────────────────────────────────────────────────
 
 def test_reader_help_lists_subcommands():

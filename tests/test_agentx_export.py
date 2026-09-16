@@ -217,3 +217,47 @@ def test_export_excludes_repos_from_existing_snapshot():
             agents = json.load(f)["agents"]
         assert [a["repo"] for a in agents] == ["a/newagent"]
         assert stats["excluded_snapshot"] == 1
+
+
+def test_export_warns_for_mapped_category_missing_from_snapshot():
+    with tempfile.TemporaryDirectory() as tmp:
+        archive = os.path.join(tmp, "data.json")
+        out = os.path.join(tmp, "candidates.json")
+        snapshot = os.path.join(tmp, "agents-snapshot.json")
+        with open(archive, "w", encoding="utf-8") as f:
+            json.dump({"AI Agents": [_paper()]}, f)
+        with open(snapshot, "w", encoding="utf-8") as f:
+            json.dump({"agents": [
+                {"repo": "some/one", "category": "bio-omics"},
+                {"repo": "some/two", "category": "platforms"},
+            ]}, f)
+
+        warnings = []
+        status_cb = lambda *msgs: warnings.extend(msgs)
+        export_agentx(archive, out, token=None, exclude_snapshot=snapshot,
+                      category_map={"AI Agents": "autonomous-research"},
+                      status_cb=status_cb)
+
+        assert any("autonomous-research" in w for w in warnings)
+
+        # A mapped slug present in the snapshot produces no warning.
+        warnings.clear()
+        export_agentx(archive, out, token=None, exclude_snapshot=snapshot,
+                      category_map={"AI Agents": "bio-omics"},
+                      status_cb=status_cb)
+        assert not any("Warning:" in w for w in warnings)
+
+
+def test_export_no_validation_without_snapshot():
+    with tempfile.TemporaryDirectory() as tmp:
+        archive = os.path.join(tmp, "data.json")
+        out = os.path.join(tmp, "candidates.json")
+        with open(archive, "w", encoding="utf-8") as f:
+            json.dump({"AI Agents": [_paper()]}, f)
+
+        warnings = []
+        export_agentx(archive, out, token=None,
+                      category_map={"AI Agents": "totally-unknown"},
+                      status_cb=lambda *a: warnings.append(a))
+
+        assert not any("Warning:" in str(w) for w in warnings)
