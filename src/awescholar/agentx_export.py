@@ -41,14 +41,16 @@ def _archive_stars(value) -> int:
 
 
 def _paper_meta(paper: dict) -> dict:
-    team = str(paper.get("team") or "")
+    # The archive's full author list is authoritative when it was backfilled;
+    # team (often just the first author) is the legacy fallback.
+    authors = str(paper.get("authors") or paper.get("team") or "")
     return {
         "title": paper.get("title") or "",
         "venue": paper.get("venue") or "",
         "doi": paper.get("doi") or "",
         "year": paper.get("year") or "",
-        "authors": team,
-        "firstAuthor": _first_author(team),
+        "authors": authors,
+        "firstAuthor": _first_author(authors),
         "paperUrl": paper.get("paperUrl") or "",
         "citations": paper.get("citations") or 0,
     }
@@ -162,7 +164,8 @@ def export_agentx(archive_path: str, output_path: str, token: str | None = None,
             })
 
     with open(output_path, "w", encoding="utf-8") as f:
-        json.dump({"agents": agents, "counts": {"total": len(agents), "graveyard": 0}},
+        # agentx SnapshotFile counts contract is {total, gone}.
+        json.dump({"agents": agents, "counts": {"total": len(agents), "gone": 0}},
                   f, indent=2, ensure_ascii=False)
         f.write("\n")
 

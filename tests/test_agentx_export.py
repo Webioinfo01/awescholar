@@ -40,7 +40,7 @@ def test_export_writes_agentx_snapshot_shape():
         with open(out, encoding="utf-8") as f:
             data = json.load(f)
         assert set(data) == {"agents", "counts"}
-        assert data["counts"] == {"total": 1, "graveyard": 0}
+        assert data["counts"] == {"total": 1, "gone": 0}
 
         agent = data["agents"][0]
         assert agent["slug"] == "agentlaboratory"
@@ -99,6 +99,23 @@ def test_export_applies_category_map_with_default_fallback():
         by_repo = {a["repo"]: a["category"] for a in agents}
         assert by_repo["SamuelSchmidgall/AgentLaboratory"] == "autonomous-research"
         assert by_repo["a/review1"] == "platforms"
+
+
+def test_export_paper_meta_prefers_authors_field():
+    """The archive's backfilled full author list wins over the legacy team."""
+    with tempfile.TemporaryDirectory() as tmp:
+        archive = os.path.join(tmp, "data.json")
+        out = os.path.join(tmp, "candidates.json")
+        with open(archive, "w", encoding="utf-8") as f:
+            json.dump({"AI Agents": [_paper(
+                authors="A U Thor, Co Author", team="Legacy Team")]}, f)
+
+        export_agentx(archive, out, token=None, status_cb=lambda *_: None)
+
+        with open(out, encoding="utf-8") as f:
+            meta = json.load(f)["agents"][0]["paperMeta"]
+        assert meta["authors"] == "A U Thor, Co Author"
+        assert meta["firstAuthor"] == "A U Thor"
 
 
 def test_export_paper_url_falls_back_to_doi():

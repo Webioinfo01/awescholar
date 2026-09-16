@@ -555,8 +555,8 @@ def main() -> int:
     p.add_argument("--no-backup", action="store_true", help="Do not create a backup of the archive before updating")
     p.add_argument("--agentx", action="store_true",
                    help="Treat --archive as an AgentX snapshot (top-level {agents, counts}); refresh "
-                        "stars/pushedAt/openIssues/language/license/description/homepage and preserve "
-                        "status, slug, paperMeta, category, etc.")
+                        "stars/pushedAt/openIssues/language/license/description/homepage/archived "
+                        "and preserve status, slug, paperMeta, category, etc.")
 
     p = updater_sub.add_parser("export-agentx", help="Export papers with GitHub repos as AgentX candidate agents")
     p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")

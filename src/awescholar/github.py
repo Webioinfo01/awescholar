@@ -6,7 +6,9 @@ export. Mirrors the backfill module's plain-urllib, best-effort style.
 
 import json
 import re
+import sys
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -37,6 +39,13 @@ def _api_get(path: str, token: str | None, timeout: float) -> dict | None:
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return json.load(resp)
+    except urllib.error.HTTPError as exc:
+        if exc.code in (403, 429):
+            # A rate-limited call must not masquerade as "no results".
+            print(f"Warning: GitHub API denied {path} (HTTP {exc.code}) — rate "
+                  "limit or private resource; results may be missing.",
+                  file=sys.stderr)
+        return None
     except Exception:  # noqa: BLE001 — unknown repos and hiccups are normal outcomes
         return None
 

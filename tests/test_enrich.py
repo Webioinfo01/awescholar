@@ -297,6 +297,28 @@ def test_resolve_repo_searches_system_name_before_full_title():
     assert len(seen_queries) == 1  # never fell through to the full-title query
 
 
+def test_resolve_repo_falls_through_when_first_round_rejects():
+    """An arXiv round that surfaces only wrong candidates must not end the
+    search — the system-name round still gets its chance."""
+    paper = {"title": "MetaBeeAI: an AI pipeline for reviews",
+             "paperUrl": "https://arxiv.org/abs/2505.00001"}
+    good = _repo("MetaBeeAI/MetaBeeAI", description="Main MetaBeeAI pipeline")
+    seen_queries = []
+
+    def fake_search(q, t, per_page=5):
+        seen_queries.append(q)
+        if q.startswith('"2505'):
+            return [_repo("x/awesome-bio-list")]  # cites the ID, is not the code
+        if "MetaBeeAI" in q and "pipeline for reviews" not in q:
+            return [good]
+        return []
+
+    with patch("awescholar.enrich.search_repositories", side_effect=fake_search):
+        pick = resolve_repo(paper, token=None)
+    assert pick["full_name"] == "MetaBeeAI/MetaBeeAI"
+    assert len(seen_queries) == 2  # arXiv round rejected, system-name round won
+
+
 def test_popularity_accepts_decisive_star_lead_on_bare_repos():
     """BioMaster pattern: real repo, empty description, 113 stars vs 0."""
     title = _title_tokens("BioMaster: Multi-agent System for Automated Bioinformatics")
@@ -337,7 +359,7 @@ def _agentx_repo(full_name="x/agent", **overrides):
         "stargazers_count": 99, "language": "Python",
         "pushed_at": "2026-09-10T00:00:00Z", "open_issues_count": 7,
         "license": {"spdx_id": "MIT"}, "description": "An agent",
-        "homepage": "https://project.example",
+        "homepage": "https://project.example", "archived": False,
     }
     base.update(overrides)
     return base
@@ -391,6 +413,7 @@ def test_enrich_agentx_updates_only_github_fields_and_preserves_status():
         assert agent["language"] == "Python"
         assert agent["description"] == "Fresh description"
         assert agent["license"] == "MIT"
+        assert agent["archived"] is False
         # Curated-first homepage preserved
         assert agent["homepage"] == "https://lab.example"
         # Status and curated fields untouched
@@ -444,6 +467,45 @@ def test_enrich_agentx_fills_homepage_when_curated_empty():
 
         agent = _read_snapshot(path)["agents"][0]
         assert agent["homepage"] == "https://project.example"
+
+
+def test_enrich_agentx_leaves_null_homepage_alone():
+    """null is the registry's "deliberately no homepage" marker, not a fill
+    request — only an explicit empty string asks for the GitHub homepage."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "agents-snapshot.json")
+        _write_snapshot(path, {
+            "agents": [{"slug": "lab", "name": "Lab", "repo": "x/lab",
+                        "githubUrl": "https://github.com/x/lab",
+                        "homepage": None, "status": "active"}],
+            "counts": {"total": 1, "gone": 0},
+        })
+        repo = _agentx_repo("x/lab", homepage="https://project.example")
+
+        with patch("awescholar.enrich.fetch_repo", return_value=repo):
+            enrich_archive(path, token="t", mode="agentx", no_backup=True)
+
+        agent = _read_snapshot(path)["agents"][0]
+        assert agent["homepage"] is None
+
+
+def test_enrich_agentx_persists_owner_archived_flag():
+    """archived feeds the registry's same-run owner-archived → gone policy."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "agents-snapshot.json")
+        _write_snapshot(path, {
+            "agents": [{"slug": "a", "name": "A", "repo": "x/a",
+                        "status": "active"}],
+            "counts": {"total": 1, "gone": 0},
+        })
+        repo = _agentx_repo("x/a", archived=True)
+
+        with patch("awescholar.enrich.fetch_repo", return_value=repo):
+            enrich_archive(path, token="t", mode="agentx", no_backup=True)
+
+        agent = _read_snapshot(path)["agents"][0]
+        assert agent["archived"] is True
+        assert agent["status"] == "active"  # lifecycle stays with the registry
 
 
 def test_enrich_agentx_skips_agents_without_repo():

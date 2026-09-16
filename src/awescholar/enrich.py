@@ -250,7 +250,8 @@ def resolve_repo(paper: dict, token: str | None, model: str = "",
     Search rounds: arXiv ID (a hit there means the repo cites the ID in its
     name, description, or README), leading system name, full title. Clear
     heuristic winners are accepted directly; ambiguous races go to the LLM
-    when one is configured.
+    when one is configured. A round whose candidates all fail resolution
+    falls through to the next round instead of ending the search.
     """
     arxiv_id = arxiv_id_from_paper(paper)
     title_tokens = _title_tokens(paper.get("title") or "")
@@ -276,7 +277,8 @@ def resolve_repo(paper: dict, token: str | None, model: str = "",
         pick = _auto_pick(title_tokens, arxiv_id, candidates, paper_year)
         if pick is None and model and api_key:
             pick = _llm_pick(paper, candidates, model, api_key, base_url)
-        return pick
+        if pick is not None:
+            return pick
     return None
 
 
@@ -366,10 +368,13 @@ def _repo_field_updates(agent: dict, repo: dict) -> dict:
 
     License writes only when the SPDX id is a real identifier (NOASSERTION,
     null, and missing are skipped so a curated or previously fetched value
-    stays untouched). Homepage is only filled when the agent has none, so a
-    curated/lab URL never gets clobbered by a generic GitHub project page.
-    Everything else (stars/pushedAt/openIssues/language/description) is
-    overwritten — GitHub is the source of truth for live metrics.
+    stays untouched). Homepage is only filled for an explicit empty string —
+    agentx snapshots use null for "deliberately no homepage", so curated
+    silence is never clobbered by a generic GitHub project page. The repo's
+    archived flag is persisted so agentx's lifecycle pass can mark
+    owner-archived repos gone in the same run. Everything else
+    (stars/pushedAt/openIssues/language/description) is overwritten — GitHub
+    is the source of truth for live metrics.
     """
     updates: dict = {
         "stars": stars_from_repo(repo),
@@ -377,12 +382,13 @@ def _repo_field_updates(agent: dict, repo: dict) -> dict:
         "openIssues": repo.get("open_issues_count", 0),
         "language": repo.get("language"),
         "description": repo.get("description"),
+        "archived": bool(repo.get("archived")),
     }
     license_info = repo.get("license") or {}
     spdx = license_info.get("spdx_id")
     if spdx and spdx != "NOASSERTION":
         updates["license"] = spdx
-    if not agent.get("homepage"):
+    if agent.get("homepage") == "":
         repo_home = repo.get("homepage")
         if repo_home:
             updates["homepage"] = repo_home
@@ -394,11 +400,11 @@ def _enrich_agentx_snapshot(archive_path: str, *, token: str | None,
     """Refresh an AgentX `{agents, counts}` snapshot from GitHub in place.
 
     Each agent with a non-empty `repo` field gets the GitHub-derived field
-    set refreshed. Every other field — `status`, `slug`, `name`, `repo`,
-    `githubUrl`, `paperMeta`, `category`, `tags`, `source`, `sourceUrl`,
-    `counts` — is preserved verbatim so agentx's own snapshot script keeps
-    owning the lifecycle (404 → "gone", retirement resolution, slug dedup,
-    `writeSnapshot`).
+    set refreshed (including the `archived` flag). Every other field —
+    `status`, `slug`, `name`, `repo`, `githubUrl`, `paperMeta`, `category`,
+    `tags`, `source`, `sourceUrl`, `counts` — is preserved verbatim so
+    agentx's own snapshot script keeps owning the lifecycle (404 → "gone",
+    retirement resolution, slug dedup, `writeSnapshot`).
     """
     with open(archive_path, "r", encoding="utf-8") as f:
         snapshot = json.load(f)
@@ -433,12 +439,6 @@ def _enrich_agentx_snapshot(archive_path: str, *, token: str | None,
         json.dump(snapshot, f, indent=2, ensure_ascii=False)
         f.write("\n")
 
-    suffix = ""
-    if missing:
-        suffix += f"; {missing} unreachable"
-    if skipped:
-        suffix += f"; {skipped} without a repo"
-    status_cb(f"Refreshed {refreshed} agents{suffix}")
     return {"refreshed": refreshed, "missing_repos": missing,
             "skipped_no_repo": skipped}
 
