@@ -12,6 +12,15 @@ CLI regrouped by first principles — every command that only derives artifacts 
 - The `Next:` hints after `updater search --archive` and `updater update --direction new2old` now point at `render counts` / `render rss`, and the scaffolded CONTRIBUTING.md writes the new names
 - Breaking: the moved and merged names (`updater readme|counts|rss|digest|export-agentx|citations`) are gone without aliases — switch scripts to the `render` names or `backfill --fields citations`; `updater search` and the other retained subcommands are unchanged
 
+New `updater publish-scan` — scan archived preprints for published versions and upgrade them in place, plus a fix that makes preprint detection cover every preprint server (not just arXiv).
+
+### Highlights
+
+- `updater publish-scan --archive data.json` checks every archived preprint against Semantic Scholar (by DOI, then fuzzy S2 title search, then Crossref `query.title` — title drift between preprint and version of record is the norm, and S2's relevance search sometimes surfaces only citers) and queues the version-of-record metadata into `publish_review.json` next to the archive; title-matched candidates must clear dedupe-grade similarity plus a non-empty venue, which rejects repost copies (ResearchHub and the like) that reuse the exact title
+- `--apply` upgrades in one shot: venue, DOI, paperUrl, year, authors and citations switch to the published version, while category, codeUrl, githubStars, domain and affiliation stay; `--review <file> --apply` applies a reviewed queue without rescanning; `--only`/`--limit` scope the scan, `--no-title-search` keeps it DOI-only
+- Preprint detection (`is_preprint`) now covers bioRxiv/medRxiv (old `10.1101` and new `10.64898` prefixes), Research Square, Preprints.org, ChemRxiv, Authorea and SSRN in addition to arXiv — a bioRxiv DOI never contains "arxiv", so the old substring check silently missed every non-arXiv preprint server
+- As a direct consequence, `updater dedupe --keep published` now correctly prefers a journal version over a bioRxiv/medRxiv preprint when resolving held-back pairs (previously the tie kept the preprint and dropped the published metadata)
+
 Monthly-report workflow — `crawler run --month` replaces copy-a-config-per-month, `updater digest` summarizes a month straight from the archive, report filenames no longer embed the model name, and the filter gates on scope before venue prestige.
 
 ### Highlights

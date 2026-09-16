@@ -235,6 +235,38 @@ def cmd_dedupe(args: argparse.Namespace, config: dict) -> int | None:
     print(f"\nResolved {len(applied)} pair(s) in {args.archive}; removed {args.review}")
 
 
+def cmd_publish_scan(args: argparse.Namespace, config: dict) -> int | None:
+    from .publish_scan import DEFAULT_REVIEW_FILENAME, apply_review, publish_scan
+
+    review_path = args.review or os.path.join(
+        os.path.dirname(args.archive) or ".", DEFAULT_REVIEW_FILENAME)
+
+    if args.apply and os.path.exists(review_path) and args.review:
+        # Two-step flow: apply a reviewed file without rescanning.
+        applied = apply_review(review_path, args.archive, no_backup=args.no_backup)
+        upgraded = sum(1 for a in applied if a["resolution"].startswith("upgraded"))
+        for item in applied:
+            title = str(item.get("published", {}).get("title") or "")[:60]
+            print(f"  {item['resolution']}: {title}")
+        print(f"\nUpgraded {upgraded} preprint(s) in {args.archive}; removed {review_path}")
+        if upgraded:
+            print(f"Next  : awescholar render counts --archive {args.archive}"
+                  "   # venue changes reshuffle README tables/counts")
+            print(f"        awescholar render rss --archive {args.archive} -o docs/rss.xml")
+        return None
+
+    stats = publish_scan(
+        args.archive, api_key=config["ss_api_key"],
+        apply=args.apply, review_path=review_path, only=args.only,
+        limit=args.limit, use_title_search=not args.no_title_search,
+        no_backup=args.no_backup,
+    )
+    if stats["applied"]:
+        print(f"Next  : awescholar render counts --archive {args.archive}"
+              "   # venue changes reshuffle README tables/counts")
+        print(f"        awescholar render rss --archive {args.archive} -o docs/rss.xml")
+
+
 def cmd_readme(args: argparse.Namespace, config: dict) -> int | None:
     from .readme import discover_readme_targets, update_readme
 
@@ -590,6 +622,22 @@ def main() -> int:
     p.add_argument("--keep", choices=["newer", "published", "both"], required=True,
                    help="newer: latest year wins · published: non-preprint wins · both: keep two entries")
 
+    p = updater_sub.add_parser("publish-scan",
+                               help="Scan archived preprints for published versions (Semantic Scholar); "
+                                    "queue upgrades into a review file, apply with --apply")
+    p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")
+    p.add_argument("--apply", action="store_true",
+                   help="Upgrade the archive after scanning (default: dry run, review file only). "
+                        "With --review pointing at an existing file, apply it without rescanning")
+    p.add_argument("--review", type=str,
+                   help="Review file path (default: publish_review.json next to the archive)")
+    p.add_argument("--only", action="append",
+                   help="Scope to entries whose DOI equals this or whose title contains it (repeatable)")
+    p.add_argument("--limit", type=int, help="Check at most N preprints (default: all)")
+    p.add_argument("--no-title-search", action="store_true",
+                   help="Only verify by DOI; skip the title-search fallback for DOI misses")
+    p.add_argument("--no-backup", action="store_true", help="Do not create a backup of the archive before applying")
+
     p = updater_sub.add_parser("search", help="Search Semantic Scholar by title/DOI and add to project data JSON")
     p.add_argument("queries", nargs="*", help="Paper titles or DOIs (omit to enter interactively)")
     p.add_argument("--archive", type=str, help="Path to project data JSON")
@@ -774,7 +822,8 @@ def main() -> int:
             return 0
         handlers = {
             "update": cmd_update, "search": cmd_search_record, "add": cmd_add,
-            "dedupe": cmd_dedupe, "backfill": cmd_backfill, "enrich": cmd_enrich,
+            "dedupe": cmd_dedupe, "publish-scan": cmd_publish_scan,
+            "backfill": cmd_backfill, "enrich": cmd_enrich,
         }
         return handlers[args.updater_command](args, config) or 0
 

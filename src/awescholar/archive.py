@@ -164,10 +164,26 @@ def merge_new_to_archive(new_path: str, archive_path: str, *,
     return archive
 
 
-def _is_preprint(paper: dict) -> bool:
+# Preprint-server DOI prefixes (arXiv, bioRxiv/medRxiv old and new, Research
+# Square, Preprints.org, ChemRxiv, Authorea, SSRN) and venue name markers —
+# a bioRxiv DOI never contains "arxiv", so substring matching alone missed
+# every non-arXiv preprint server.
+_PREPRINT_DOI_PREFIXES = (
+    "10.48550/", "10.1101/", "10.64898/", "10.21203/", "10.20944/",
+    "10.26434/", "10.22541/", "10.2139/",
+)
+_PREPRINT_VENUE_MARKERS = (
+    "arxiv", "biorxiv", "medrxiv", "chemrxiv", "research square",
+    "preprints.org", "preprint", "ssrn",
+)
+
+
+def is_preprint(paper: dict) -> bool:
     doi = str(paper.get("doi") or "").casefold()
     venue = str(paper.get("venue") or "").casefold()
-    return "arxiv" in doi or "arxiv" in venue or (not doi and not venue)
+    if doi.startswith(_PREPRINT_DOI_PREFIXES):
+        return True
+    return any(m in venue for m in _PREPRINT_VENUE_MARKERS) or (not doi and not venue)
 
 
 def _wins_incoming(incoming: dict, existing: dict, keep: str) -> bool:
@@ -175,7 +191,7 @@ def _wins_incoming(incoming: dict, existing: dict, keep: str) -> bool:
     if keep == "newer":
         return str(incoming.get("year") or "")[:10] > str(existing.get("year") or "")[:10]
     if keep == "published":
-        return (not _is_preprint(incoming)) - (not _is_preprint(existing)) > 0
+        return (not is_preprint(incoming)) - (not is_preprint(existing)) > 0
     return False
 
 

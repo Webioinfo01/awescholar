@@ -237,6 +237,10 @@ awescholar crawler run --month 2026-05                # 某个月的完整流水
 awescholar updater update --direction new2old --input X --archive data.json  # 合并到项目数据 JSON（疑似重复会被拦下）
 awescholar updater update --direction new2old --input X --archive data.json --no-dedupe  # 全部合入，跳过重复检测
 awescholar updater dedupe --review output/dedupe_review.json --archive data.json --keep published  # 处理被拦下的重复对
+awescholar updater publish-scan --archive data.json   # 扫描库内预印本是否已正式发表（默认 dry run -> publish_review.json）
+awescholar updater publish-scan --archive data.json --apply  # 扫描并原地升级（venue/DOI/paperUrl/引用切换，策展字段保留）
+awescholar updater publish-scan --archive data.json --review publish_review.json --apply  # 只应用已审阅的队列，不重新扫描
+awescholar updater publish-scan --archive data.json --only XunZi --limit 5   # 按 DOI/标题子串限定，限制扫描数量
 awescholar updater search --json-file papers.json --by title   # 搜索并保存待审阅
 awescholar updater search --archive data.json --by title       # 搜索并直接添加
 awescholar updater search --archive data.json --category "AI Agents"  # 添加到指定分类
@@ -288,6 +292,8 @@ awescholar reader stats --archive data.json --category "AI Agents"   # 单分类
 `reader` 命令是策展存档的只读查询面：关键词检索（`query`）、为种子论文找相关工作（`related`，支持 `--input` 喂入粘贴的摘要）、按研究领域生成必读清单（`recommend`，离线或 `--llm`）、存档统计（`stats`）。它们不修改数据、不需要 config，AI agent 可以即时回答"我的库里有哪些关于 X 的论文"。`updater update` 合并时，标题与库内已有条目高度相似的论文（预印本/正式版的典型特征）会被拦到输入文件旁的 `dedupe_review.json`，用 `updater dedupe --keep newer|published|both` 处理，`--no-dedupe` 可跳过检测。
 
 `render readme` 只更新 `<!-- AWESCHOLAR:START -->` 和 `<!-- AWESCHOLAR:END -->` 之间的自动生成区域。这个区域包含 awescholar 生成的目录和分类表格。自定义标题、引用和项目介绍应放在 marker 外。已有 README 如果没有这些 marker，会直接报错，避免整文件覆盖。如果 README 还不存在，`--title` 用来控制生成文件的一级标题。
+
+`updater publish-scan` 是合并期去重的主动镜像：不等正式版作为新数据撞进来，而是主动扫描库内的预印本（按预印本服务器 DOI 前缀或 venue 识别 —— 新旧 bioRxiv/medRxiv、arXiv、ChemRxiv、Research Square、Preprints.org、Authorea、SSRN），逐条经三通道查证 —— Semantic Scholar 按 DOI、S2 模糊标题检索、再 Crossref `query.title`（预印本与正式版标题漂移是常态："AlphaFold3" vs "AlphaFold 3"），标题匹配的候选需同时过相似度门槛和非空 venue 门槛（挡掉复用原题的 ResearchHub 之类转载副本）—— 把可升级项排进存档旁的 `publish_review.json`。默认 dry run；`--apply` 原地升级 —— venue、DOI、paperUrl、年份、作者、引用切换为正式版，分类、codeUrl、githubStars、domain、affiliation 原样保留 —— `--review <file> --apply` 只应用已审阅队列不重扫。同一套修正后的预印本识别，也让 `updater dedupe --keep published` 在裁决时能正确让期刊版压过 bioRxiv 预印本。
 
 当不指定 `--readme` 时，`render readme` 会自动发现当前工作目录下所有包含 `<!-- AWESCHOLAR:START -->` 标记的 `README*.md` / `readme*.md` 文件并逐一更新。这适用于维护多语言 README（如 `readme.md` + `README.zh-CN.md`）— 表格内容自动保持同步。
 
