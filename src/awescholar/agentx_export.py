@@ -50,9 +50,10 @@ def _paper_meta(paper: dict) -> dict:
         "venue": paper.get("venue") or "",
         "doi": paper.get("doi") or "",
         "year": paper.get("year") or "",
-        "team": team,
+        "authors": team,
         "firstAuthor": _first_author(team),
         "paperUrl": paper.get("paperUrl") or "",
+        "citations": paper.get("citations") or 0,
     }
 
 

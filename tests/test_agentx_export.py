@@ -53,7 +53,8 @@ def test_export_writes_agentx_snapshot_shape():
         assert agent["status"] == "active"
         assert agent["source"] == "awescholar"
         assert agent["paperMeta"]["firstAuthor"] == "Samuel Schmidgall"
-        assert agent["paperMeta"]["team"] == "Samuel Schmidgall, Yusheng Su"
+        assert agent["paperMeta"]["authors"] == "Samuel Schmidgall, Yusheng Su"
+        assert agent["paperMeta"]["citations"] == 10
 
 
 def test_export_skips_papers_without_github_repo_and_dedupes():
