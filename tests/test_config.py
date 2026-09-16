@@ -19,13 +19,16 @@ from awescholar.config import (
 )
 
 
-def test_load_config_defaults_data_json_path_to_none():
+def test_load_config_defaults_data_json_path_to_none(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+
     config = load_config(None)
 
     assert config["data_json_path"] is None
 
 
-def test_load_config_reads_pipeline_data_json_path(tmp_path):
+def test_load_config_reads_pipeline_data_json_path(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
     config_path = tmp_path / "config.json"
     config_path.write_text(
         json.dumps({"pipeline": {"data_json_path": "data/data.json"}}),
@@ -37,7 +40,8 @@ def test_load_config_reads_pipeline_data_json_path(tmp_path):
     assert config["data_json_path"] == "data/data.json"
 
 
-def test_load_config_fails_fast_for_missing_file(tmp_path):
+def test_load_config_fails_fast_for_missing_file(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
     missing_path = tmp_path / "missing.json"
 
     with pytest.raises(FileNotFoundError, match="Config file not found"):
@@ -66,6 +70,7 @@ def test_ss_env_api_key_returns_none_when_unset(monkeypatch):
 
 
 def test_load_config_reads_ss_api_key_from_env(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("SEMANTIC_SCHOLAR_API_KEY", "env-key")
     config_path = tmp_path / "config.json"
     config_path.write_text(json.dumps({}), encoding="utf-8")
@@ -76,6 +81,7 @@ def test_load_config_reads_ss_api_key_from_env(monkeypatch, tmp_path):
 
 
 def test_load_config_config_value_beats_env(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("SEMANTIC_SCHOLAR_API_KEY", "env-key")
     config_path = tmp_path / "config.json"
     config_path.write_text(
@@ -150,6 +156,99 @@ def test_load_config_config_value_beats_dotenv_files(monkeypatch, tmp_path):
     config = load_config(str(config_path))
 
     assert config["ss_api_key"] == "config-key"
+
+
+def _write_global_config(home: Path, payload: dict) -> None:
+    global_dir = home / ".config" / "awescholar"
+    global_dir.mkdir(parents=True, exist_ok=True)
+    (global_dir / "config.json").write_text(json.dumps(payload), encoding="utf-8")
+
+
+def test_load_config_reads_global_config_without_path(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    _write_global_config(
+        tmp_path,
+        {
+            "model": {"profile": "glm", "name": "glm-5.3"},
+            "model_profiles": {
+                "glm": {"api_key": "global-glm-key", "base_url": "https://glm.example"}
+            },
+        },
+    )
+
+    config = load_config(None)
+
+    assert config["model"] == "openai/glm-5.3"
+    assert config["api_key"] == "global-glm-key"
+    assert config["base_url"] == "https://glm.example"
+
+
+def test_project_config_overrides_global_leaves(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    _write_global_config(
+        tmp_path,
+        {
+            "model": {"profile": "glm", "name": "glm-5.3"},
+            "search": {"limit": 100},
+        },
+    )
+    project = tmp_path / "config.json"
+    project.write_text(
+        json.dumps({"model": {"name": "glm-5.1"}, "categories": ["AI Agents"]}),
+        encoding="utf-8",
+    )
+
+    config = load_config(str(project))
+
+    assert config["model"] == "openai/glm-5.1"
+    assert config["limit_search"] == 100
+    assert config["categories"] == ["AI Agents"]
+
+
+def test_model_profiles_merge_per_profile(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    _write_global_config(
+        tmp_path,
+        {
+            "model_profiles": {
+                "glm": {"api_key": "old-key", "base_url": "https://glm.example"},
+                "gemini": {"api_key": "gemini-key", "base_url": "https://gemini.example"},
+            }
+        },
+    )
+    project = tmp_path / "config.json"
+    project.write_text(
+        json.dumps(
+            {
+                "model_profiles": {
+                    "glm": {"api_key": "new-key"},
+                    "mimo": {"api_key": "mimo-key"},
+                },
+                "model": {"profile": "glm"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_config(str(project))
+
+    assert config["model_profiles"]["glm"] == {
+        "api_key": "new-key",
+        "base_url": "https://glm.example",
+    }
+    assert config["model_profiles"]["gemini"]["api_key"] == "gemini-key"
+    assert config["model_profiles"]["mimo"]["api_key"] == "mimo-key"
+    assert config["api_key"] == "new-key"
+
+
+def test_global_config_env_refs_expand(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("GITHUB_TOKEN", "gh-from-env")
+    _write_global_config(tmp_path, {"github": {"token": "${GITHUB_TOKEN}"}})
+
+    config = load_config(None)
+
+    assert config["github_token"] == "gh-from-env"
 
 
 def test_resolve_agent_config_prefixes_agent_model_names():

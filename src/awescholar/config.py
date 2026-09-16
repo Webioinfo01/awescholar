@@ -70,15 +70,40 @@ def _load_dotenv_files() -> None:
     load_dotenv(Path.home() / ".config" / "awescholar" / ".env")
 
 
+def _global_config_path() -> Path:
+    return Path.home() / ".config" / "awescholar" / "config.json"
+
+
+def _deep_merge(base: dict, override: dict) -> dict:
+    """Recursively merge override into base; nested dicts merge, override leaves win."""
+    merged = dict(base)
+    for key, value in override.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _deep_merge(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
 def load_config(path: str | None) -> dict:
-    """Load config from JSON file, expanding ${ENV_VAR} patterns."""
+    """Load config from JSON files, expanding ${ENV_VAR} patterns.
+
+    The file given via --config deep-merges over ~/.config/awescholar/config.json,
+    so project-level settings override global defaults key by key. Without --config,
+    the global file alone is used.
+    """
     _load_dotenv_files()
     raw = {}
+    global_path = _global_config_path()
+    if global_path.is_file():
+        with open(global_path, "r", encoding="utf-8") as f:
+            raw = json.load(f)
     if path:
         if not os.path.exists(path):
             raise FileNotFoundError(f"Config file not found: {path}")
         with open(path, "r", encoding="utf-8") as f:
-            raw = _expand_env_vars(json.load(f))
+            raw = _deep_merge(raw, json.load(f))
+    raw = _expand_env_vars(raw)
 
     model = raw.get("model", {})
     ss = raw.get("semantic_scholar", {})

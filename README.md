@@ -84,9 +84,14 @@ The agent uses the [SKILL.md](resources/skills/awescholar/SKILL.md) to understan
 ### Human
 
 ```bash
-# Set API keys (add to ~/.zshrc or ~/.bashrc to persist)
-export GLM_API_KEY="sk-..."
-export SEMANTIC_SCHOLAR_API_KEY="your-key"   # optional, without it uses free tier
+# Store API keys once in the user keyring (recommended — works for agents and
+# cron too, where ~/.zshrc is never sourced):
+mkdir -p ~/.config/awescholar
+cat >> ~/.config/awescholar/.env <<'EOF'
+GLM_API_KEY=sk-...
+SEMANTIC_SCHOLAR_API_KEY=your-key   # optional, without it uses free tier
+GITHUB_TOKEN=ghp-...                 # optional, for repo enrichment
+EOF
 
 # Run the full pipeline
 awescholar --config config.json crawler run
@@ -95,7 +100,9 @@ awescholar --config config.json crawler run
 awescholar --config config.json crawler run "perturbation prediction|single cell" --date 2025-01-01:2025-05-30
 ```
 
-The Semantic Scholar API key is resolved in this order: `--ss-api-key` CLI flag > `semantic_scholar.api_key` in config.json > `SEMANTIC_SCHOLAR_API_KEY` (or legacy `SEMANTICSCHOLAR_API_KEY`) environment variable. When no key is found anywhere, awescholar prints a warning to stderr and falls back to the anonymous free tier.
+Exporting the same variables in `~/.zshrc` also works and takes precedence over the `.env` files; the `.env` keyring is the reliable option when awescholar is invoked from non-interactive shells.
+
+The Semantic Scholar API key is resolved in this order: `--ss-api-key` CLI flag > `semantic_scholar.api_key` in the project config.json > `semantic_scholar.api_key` in `~/.config/awescholar/config.json` > `SEMANTIC_SCHOLAR_API_KEY` (or legacy `SEMANTICSCHOLAR_API_KEY`) environment variable > `.env` files (project `.env` > `~/.config/awescholar/.env`). When no key is found anywhere, awescholar prints a warning to stderr and falls back to the anonymous free tier.
 
 ```bash
 awescholar --ss-api-key "your-key" crawler search "AI agent" --limit 10
@@ -105,7 +112,12 @@ See [Commands](#commands) below for the full CLI reference.
 
 ## Detailed Config
 
-Copy `config.example.json` from the [repo root](https://github.com/Webioinfo01/awescholar/blob/main/config.example.json) and fill in your values — or set env vars directly and skip the config file.
+Config resolves in two layers, deep-merged so the project file only overrides what it actually sets:
+
+1. `~/.config/awescholar/config.json` — global defaults. Put shared `model_profiles`, `semantic_scholar`, and `github` entries here once.
+2. The `--config` file (e.g. `month_reports/config.json`) — per-project overrides: search query and dates, filter settings, output paths, categories, and the `model.profile`/`model.name` choice.
+
+Copy `config.example.json` from the [repo root](https://github.com/Webioinfo01/awescholar/blob/main/config.example.json) to either location and fill in your values — or set env vars directly and skip the config files. Commands run without `--config` use the global file alone, so key-dependent commands like `enrich` and `export-agentx` work out of the box.
 
 ```json
 {

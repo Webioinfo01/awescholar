@@ -36,12 +36,13 @@ Match the user's intent to a task domain, then follow the workflow below.
 
 1. Install: `pip install awescholar`
 2. Copy `config.example.json` to `config.json` (or any path)
-3. Set API keys: `SEMANTICSCHOLAR_API_KEY` and your LLM provider key (e.g. `GLM_API_KEY`)
-4. Verify: `awescholar -v`
+3. Set API keys in `~/.config/awescholar/.env` (recommended — loaded automatically; do NOT assume shell env vars are set when invoked as an agent)
+4. Optional: keep shared model profiles and API key references in `~/.config/awescholar/config.json` — the project config passed via `--config` deep-merges over it key by key
+5. Verify: `awescholar -v`
 
 ## Core Rules
 
-1. Always use `--config` when running crawler commands — it carries model, API key, and search settings.
+1. Always use `--config` when running crawler commands — it carries model, API key, and search settings. Without `--config`, `~/.config/awescholar/config.json` supplies global defaults (model profiles, API keys), so key-only commands like `updater enrich` work without a project config.
 2. Crawler steps are sequential: search → annotate → filter → report. Each reads from the previous step's output by default, but accepts `--input` to override.
 3. Updater commands operate on the **project data JSON** (long-lived curated file, e.g. `docs/data.json`). Do not confuse with pipeline intermediates (`updater.json`, `updater_filter.json`).
 4. For `updater search`: use `--json-file` to save results for review first, then `updater update --direction new2old` to merge. Use `--archive` only when you want to write directly.
