@@ -280,11 +280,11 @@ def resolve_repo(paper: dict, token: str | None, model: str = "",
     return None
 
 
-def enrich_archive(archive_path: str, token: str | None = None, model: str = "",
-                   api_key: str | None = None, base_url: str | None = None,
-                   use_llm: bool = True, limit: int | None = None,
-                   no_backup: bool = False, status_cb=print) -> dict:
-    """Fill empty codeUrl fields and refresh numeric githubStars in place."""
+def _enrich_archive_shape(archive_path: str, *, token: str | None, model: str = "",
+                          api_key: str | None = None, base_url: str | None = None,
+                          use_llm: bool = True, limit: int | None = None,
+                          no_backup: bool = False, status_cb=print) -> dict:
+    """Fill empty codeUrl fields and refresh numeric githubStars in place (awesome-list mode)."""
     with open(archive_path, "r", encoding="utf-8") as f:
         archive = json.load(f)
 
@@ -359,3 +359,110 @@ def enrich_archive(archive_path: str, token: str | None = None, model: str = "",
         "refreshed": refreshed,
         "missing_repos": missing,
     }
+
+
+def _repo_field_updates(agent: dict, repo: dict) -> dict:
+    """GitHub-derived fields for an AgentX agent entry; respects curated-first.
+
+    License writes only when the SPDX id is a real identifier (NOASSERTION,
+    null, and missing are skipped so a curated or previously fetched value
+    stays untouched). Homepage is only filled when the agent has none, so a
+    curated/lab URL never gets clobbered by a generic GitHub project page.
+    Everything else (stars/pushedAt/openIssues/language/description) is
+    overwritten — GitHub is the source of truth for live metrics.
+    """
+    updates: dict = {
+        "stars": stars_from_repo(repo),
+        "pushedAt": repo.get("pushed_at"),
+        "openIssues": repo.get("open_issues_count", 0),
+        "language": repo.get("language"),
+        "description": repo.get("description"),
+    }
+    license_info = repo.get("license") or {}
+    spdx = license_info.get("spdx_id")
+    if spdx and spdx != "NOASSERTION":
+        updates["license"] = spdx
+    if not agent.get("homepage"):
+        repo_home = repo.get("homepage")
+        if repo_home:
+            updates["homepage"] = repo_home
+    return updates
+
+
+def _enrich_agentx_snapshot(archive_path: str, *, token: str | None,
+                            no_backup: bool = False, status_cb=print) -> dict:
+    """Refresh an AgentX `{agents, counts}` snapshot from GitHub in place.
+
+    Each agent with a non-empty `repo` field gets the GitHub-derived field
+    set refreshed. Every other field — `status`, `slug`, `name`, `repo`,
+    `githubUrl`, `paperMeta`, `category`, `tags`, `source`, `sourceUrl`,
+    `counts` — is preserved verbatim so agentx's own snapshot script keeps
+    owning the lifecycle (404 → "gone", retirement resolution, slug dedup,
+    `writeSnapshot`).
+    """
+    with open(archive_path, "r", encoding="utf-8") as f:
+        snapshot = json.load(f)
+    agents = snapshot.get("agents") if isinstance(snapshot, dict) else None
+    if not isinstance(agents, list):
+        raise ValueError(  # noqa: TRY004 — shape mismatch, not a builtin-type check
+            f"{archive_path}: expected top-level {{agents, counts}} (AgentX snapshot), "
+            "not a category-dict archive; pass --agentx on the CLI, or run "
+            "awescholar updater enrich without --agentx for awesome-list archives.")
+
+    refreshed = missing = skipped = 0
+    for agent in agents:
+        repo_field = str(agent.get("repo") or "")
+        if not repo_field:
+            skipped += 1
+            continue
+        repo = fetch_repo(repo_field, token)
+        if not repo:
+            missing += 1
+            continue
+        for key, value in _repo_field_updates(agent, repo).items():
+            agent[key] = value
+        refreshed += 1
+
+    if not no_backup:
+        ts = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
+        backup_path = f"{archive_path}.{ts}.bak"
+        shutil.copy2(archive_path, backup_path)
+        status_cb(f"Created backup: {backup_path}")
+
+    with open(archive_path, "w", encoding="utf-8") as f:
+        json.dump(snapshot, f, indent=2, ensure_ascii=False)
+        f.write("\n")
+
+    suffix = ""
+    if missing:
+        suffix += f"; {missing} unreachable"
+    if skipped:
+        suffix += f"; {skipped} without a repo"
+    status_cb(f"Refreshed {refreshed} agents{suffix}")
+    return {"refreshed": refreshed, "missing_repos": missing,
+            "skipped_no_repo": skipped}
+
+
+def enrich_archive(archive_path: str, token: str | None = None, *, mode: str = "archive",
+                   model: str = "", api_key: str | None = None, base_url: str | None = None,
+                   use_llm: bool = True, limit: int | None = None,
+                   no_backup: bool = False, status_cb=print) -> dict:
+    """Refresh an archive in place — dispatches on `mode`.
+
+    - `mode="archive"` (default, awesome-list): fill empty `codeUrl` from
+      GitHub search (LLM tiebreak on ambiguous matches) and overwrite
+      `githubStars` to a bare int. Legacy badge-URL `githubStars` are
+      migrated along the way.
+    - `mode="agentx"` (AgentX snapshot): overwrite only the GitHub-derived
+      field set on each agent; `status` and every other curated field are
+      strictly preserved.
+    """
+    if mode == "archive":
+        return _enrich_archive_shape(
+            archive_path, token=token, model=model, api_key=api_key,
+            base_url=base_url, use_llm=use_llm, limit=limit,
+            no_backup=no_backup, status_cb=status_cb)
+    if mode == "agentx":
+        return _enrich_agentx_snapshot(
+            archive_path, token=token, no_backup=no_backup, status_cb=status_cb)
+    raise ValueError(f"unknown mode: {mode!r}")

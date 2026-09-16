@@ -290,12 +290,22 @@ def cmd_enrich(args: argparse.Namespace, config: dict) -> int | None:
         warn_missing_github_token()
 
     stats = enrich_archive(
-        archive_path=args.archive, token=token, model=model or "",
-        api_key=api_key, base_url=base_url, use_llm=not args.no_llm,
-        limit=args.limit, no_backup=args.no_backup, status_cb=status,
+        archive_path=args.archive, token=token,
+        mode="agentx" if args.agentx else "archive",
+        model=model or "", api_key=api_key, base_url=base_url,
+        use_llm=not args.no_llm, limit=args.limit,
+        no_backup=args.no_backup, status_cb=status,
     )
-    print(f"\nResolved {stats['resolved']}/{stats['resolve_candidates']} repos · "
-          f"refreshed stars for {stats['refreshed']}/{stats['refresh_candidates']}")
+    if args.agentx:
+        suffix = ""
+        if stats["missing_repos"]:
+            suffix += f"; {stats['missing_repos']} unreachable"
+        if stats["skipped_no_repo"]:
+            suffix += f"; {stats['skipped_no_repo']} without a repo"
+        print(f"\nRefreshed {stats['refreshed']} agents{suffix}")
+    else:
+        print(f"\nResolved {stats['resolved']}/{stats['resolve_candidates']} repos · "
+              f"refreshed stars for {stats['refreshed']}/{stats['refresh_candidates']}")
 
 
 def cmd_export_agentx(args: argparse.Namespace, config: dict) -> int | None:
@@ -535,12 +545,18 @@ def main() -> int:
     p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")
     p.add_argument("--no-backup", action="store_true", help="Do not create a backup of the archive before updating")
 
-    p = updater_sub.add_parser("enrich", help="Fill empty codeUrl from GitHub search and refresh githubStars")
-    p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")
-    p.add_argument("--limit", type=int, help="Resolve at most N papers without a repo (metrics refresh is unbounded)")
+    p = updater_sub.add_parser("enrich", help="Fill empty codeUrl from GitHub search and refresh githubStars; "
+                                          "with --agentx, refresh an AgentX registry snapshot instead")
+    p.add_argument("--archive", type=str, required=True,
+                   help="Path to project data JSON (awesome-list) or, with --agentx, an AgentX snapshot JSON")
+    p.add_argument("--limit", type=int, help="Resolve at most N papers without a repo (metrics refresh is unbounded; ignored in --agentx)")
     p.add_argument("--no-llm", action="store_true",
-                   help="Skip the LLM tiebreak; only unambiguous matches resolve")
+                   help="Skip the LLM tiebreak; only unambiguous matches resolve (ignored in --agentx)")
     p.add_argument("--no-backup", action="store_true", help="Do not create a backup of the archive before updating")
+    p.add_argument("--agentx", action="store_true",
+                   help="Treat --archive as an AgentX snapshot (top-level {agents, counts}); refresh "
+                        "stars/pushedAt/openIssues/language/license/description/homepage and preserve "
+                        "status, slug, paperMeta, category, etc.")
 
     p = updater_sub.add_parser("export-agentx", help="Export papers with GitHub repos as AgentX candidate agents")
     p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")

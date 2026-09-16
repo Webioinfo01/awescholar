@@ -239,6 +239,7 @@ awescholar updater add --archive data.json            # Interactively add a reco
 awescholar updater backfill --archive data.json       # Fill missing affiliation/team fields (Semantic Scholar + Crossref + OpenAlex)
 awescholar updater enrich --archive data.json         # Fill empty codeUrl from GitHub search + refresh numeric githubStars
 awescholar updater enrich --archive data.json --limit 20 --no-llm  # Resolve at most 20 papers, heuristic matches only
+awescholar updater enrich --archive agents-snapshot.json --agentx  # Refresh an AgentX registry snapshot (stars/pushedAt/openIssues/language/license/description/homepage; status strictly preserved)
 awescholar updater export-agentx --archive data.json -o candidates.json  # Papers with GitHub repos as AgentX candidate agents
 awescholar updater export-agentx --archive data.json -o c.json --category-map map.json --default-category platforms
 
