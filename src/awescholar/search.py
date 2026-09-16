@@ -112,7 +112,11 @@ def search_papers(
                 doi=doi,
                 title=paper.title,
                 abstract=getattr(paper, "abstract", None),
-                authors=json.dumps({"name": team_name, "affiliations": affiliations}),
+                authors=json.dumps({
+                    "name": team_name,
+                    "affiliations": affiliations,
+                    "all": [a.name for a in paper.authors if a.name],
+                }),
                 year=getattr(paper, "year", None),
                 venue=getattr(paper, "venue", None),
                 journal=paper.journal.name if paper.journal else None,

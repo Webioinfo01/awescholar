@@ -27,7 +27,9 @@ def _paper_to_record(paper) -> dict | None:
         return None
 
     team = ""
+    author_names = []
     if paper.authors:
+        author_names = [a.name for a in paper.authors if a.name]
         team = paper.authors[-1].name or ""
 
     year = ""
@@ -57,6 +59,7 @@ def _paper_to_record(paper) -> dict | None:
         "year": year,
         "title": paper.title or "",
         "team": team,
+        "authors": author_names,
         "team website": "",
         "affiliation": "",
         "domain": "",

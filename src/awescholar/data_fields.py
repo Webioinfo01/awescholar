@@ -11,6 +11,7 @@ PROJECT_PAPER_FIELDS = (
     "year",
     "title",
     "team",
+    "authors",
     "team website",
     "affiliation",
     "domain",
@@ -26,6 +27,7 @@ UPDATER_PAPER_FIELDS = (
     "year",
     "title",
     "team",
+    "authors",
     "team website",
     "affiliation",
     "domain",
@@ -43,6 +45,7 @@ FIELD_ALIASES = {
     "year": ("year", "publication_date", "publicationDate"),
     "title": ("title",),
     "team": ("team",),
+    "authors": ("authors",),
     "team website": ("team website", "team_website", "teamWebsite"),
     "affiliation": ("affiliation",),
     "domain": ("domain",),
@@ -80,7 +83,8 @@ def _extract_team_name(authors: str) -> str:
     """Extract author name from the stored authors string.
 
     The search step stores authors as a JSON string, e.g.
-    '{"name": "Yutaka Saito", "affiliations": ["The University of Tokyo"]}'.
+    '{"name": "Yutaka Saito", "affiliations": ["The University of Tokyo"],
+      "all": ["...full author list..."]}'.
     """
     if not authors:
         return ""
@@ -92,6 +96,24 @@ def _extract_team_name(authors: str) -> str:
         except (ValueError, SyntaxError):
             return ""
     return ""
+
+
+def _extract_author_list(authors) -> list:
+    """Full author-name list from a stored authors value.
+
+    Accepts the list form written by record search ('["A", "B"]') or the
+    JSON blob form written by the crawler DB ('{"name": ..., "all": [...]}').
+    """
+    if isinstance(authors, list):
+        return [a for a in authors if a]
+    if isinstance(authors, str) and authors:
+        try:
+            parsed = ast.literal_eval(authors)
+        except (ValueError, SyntaxError):
+            return []
+        if isinstance(parsed, dict):
+            return [a for a in (parsed.get("all") or []) if a]
+    return []
 
 
 def _extract_affiliation(authors: str) -> str:
@@ -121,6 +143,8 @@ def normalize_paper(paper: dict, fields: tuple) -> dict:
     if not entry.get("affiliation"):
         entry["affiliation"] = _extract_affiliation(paper.get("authors", ""))
 
+    entry["authors"] = _extract_author_list(entry.get("authors"))
+
     year = entry.get("year")
     if isinstance(year, str) and len(year) >= 7:
         entry["year"] = year[:7]
@@ -129,12 +153,12 @@ def normalize_paper(paper: dict, fields: tuple) -> dict:
 
 
 def normalize_project_paper_fields(paper: dict) -> dict:
-    """Project data (data.json) — 12 fields only."""
+    """Project data (data.json) — 13 fields only."""
     return normalize_paper(paper, PROJECT_PAPER_FIELDS)
 
 
 def normalize_updater_paper_fields(paper: dict) -> dict:
-    """Updater pipeline (updater.json / updater_filter.json) — 14 fields."""
+    """Updater pipeline (updater.json / updater_filter.json) — 15 fields."""
     return normalize_paper(paper, UPDATER_PAPER_FIELDS)
 
 
@@ -142,7 +166,7 @@ def merge_preserving_nonempty(existing: dict, incoming: dict) -> dict:
     """Merge incoming fields without clearing existing non-empty values."""
     merged = {**existing}
     for key, value in incoming.items():
-        if value in (None, "") and existing.get(key) not in (None, ""):
+        if value in (None, "", []) and existing.get(key) not in (None, "", []):
             continue
         merged[key] = value
     return merged

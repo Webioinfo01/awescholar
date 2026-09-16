@@ -70,8 +70,10 @@ def _mock_paper(title="Test Paper", doi="10.1/test"):
     """Create a mock SemanticScholar paper object."""
     paper = MagicMock()
     paper.title = title
-    paper.authors = [MagicMock(name="Author")]
-    paper.authors[-1].name = "Last Author"
+    first, last = MagicMock(), MagicMock()
+    first.name = "First Author"
+    last.name = "Last Author"
+    paper.authors = [first, last]
     paper.publicationDate = "2025-03-15"
     paper.venue = "TestVenue"
     paper.paperId = "abc123"
@@ -102,6 +104,8 @@ def test_search_and_add_json_file_creates_flat_list(MockSS, mock_input):
         assert len(papers) == 1
         assert papers[0]["title"] == "My Paper Title"
         assert papers[0]["doi"] == "10.1/mp"
+        assert papers[0]["team"] == "Last Author"
+        assert papers[0]["authors"] == ["First Author", "Last Author"]
 
 
 @patch("builtins.input", side_effect=["Cited Paper", ""])

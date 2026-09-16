@@ -96,6 +96,7 @@ def test_search_papers_stores_author_affiliations(tmp_path, monkeypatch):
     stored = json.loads(saved[0]["authors"])
     assert stored["name"] == "Yutaka Saito"
     assert stored["affiliations"] == ["The University of Tokyo"]
+    assert stored["all"] == ["First Author", "Yutaka Saito"]
 
 
 def test_search_papers_falls_back_to_author_name_without_details(tmp_path, monkeypatch):
@@ -112,6 +113,7 @@ def test_search_papers_falls_back_to_author_name_without_details(tmp_path, monke
     stored = json.loads(saved[0]["authors"])
     assert stored["name"] == "Solo Author"
     assert stored["affiliations"] == []
+    assert stored["all"] == ["Solo Author"]
 
 
 def test_search_papers_skips_papers_without_doi(tmp_path, monkeypatch):
