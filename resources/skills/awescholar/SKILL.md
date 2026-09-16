@@ -245,7 +245,7 @@ Decision order:
 
 ### Updater Enrich
 
-Use when papers lack GitHub links or star counts are stale. Fills empty `codeUrl` (GitHub search: arXiv ID first, title second; corroborated heuristic match auto-accepted, ambiguous races judged by the configured LLM) and refreshes `githubStars` as a numeric count for every linked repo. Only empty `codeUrl` fields are filled; legacy badge-URL stars migrate automatically.
+Use when papers lack GitHub links or star counts are stale. Fills empty `codeUrl` (GitHub search: arXiv ID first, title second; corroborated heuristic match auto-accept, ambiguous races judged by the configured LLM) and refreshes `githubStars` as a numeric count for every linked repo. Only empty `codeUrl` fields are filled; legacy badge-URL stars migrate automatically. If the project convention is badge URLs (Awesome-AI-Meets-Biology), write `https://img.shields.io/github/stars/owner/repo` into `githubStars` for GitHub `codeUrl` entries and leave it empty for non-GitHub code links.
 
 ```bash
 awescholar updater enrich --archive docs/data.json              # resolve + refresh (LLM tiebreak on when configured)
