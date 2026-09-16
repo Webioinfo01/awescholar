@@ -15,6 +15,7 @@ Citation-surface + GitHub-enrichment release — the website shows a citation ba
 - The README table now derives the stars badge from the repo URL when `githubStars` holds a numeric count, so stars stay live without re-running enrich; legacy badge-URL values still render unchanged. `updater add` no longer writes badge URLs into new records
 - Config now resolves in two deep-merged layers: `~/.config/awescholar/config.json` holds global defaults (shared `model_profiles`, `semantic_scholar`, `github`), and the `--config` project file overrides it key by key (nested dicts merge, so a project can override one profile field or one model name without restating the rest). Commands run without `--config` use the global file alone, so key-dependent commands like `updater enrich` work standalone
 - Docs now recommend `~/.config/awescholar/.env` as the primary key store: it is loaded by awescholar itself, so keys stay visible to agents and cron invocations whose shells never source `~/.zshrc`; shell env vars still win when present
+- The enrich LLM tiebreak now sees each candidate's `created`/`pushed` dates and topics, and the prompt states the collision rule (a repo created or last pushed years before the paper is usually an unrelated older project sharing the name) — acronym collisions such as an HPC tool matching a same-named dataset paper no longer win the tiebreak
 
 ## v0.2.2
 

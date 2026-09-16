@@ -125,6 +125,32 @@ def test_llm_pick_empty_repo_means_none():
         assert _llm_pick(paper, [_repo("x/BioAgent")], "m", "key", None) is None
 
 
+def test_llm_pick_payload_carries_repo_dates_for_collision_checks():
+    """Without created/pushed dates the LLM cannot spot acronym collisions
+    (an old tool sharing the paper's system name)."""
+    paper = {"title": "GRAPE: Heterogeneous Graph Learning", "year": 2025}
+    candidates = [
+        {
+            "full_name": "maxiaoba/GRAPE",
+            "stargazers_count": 152,
+            "created_at": "2019-12-05T17:00:00Z",
+            "pushed_at": "2021-03-25T17:43:17Z",
+            "topics": ["graphs"],
+            "description": "Handling Missing Data with Graph Representation Learning",
+        }
+    ]
+    with patch("awescholar.enrich.complete") as mock_complete:
+        from awescholar.enrich import RepoPick
+        mock_complete.return_value = RepoPick(repo="", reason="collision")
+        assert _llm_pick(paper, candidates, "m", "key", None) is None
+        payload = json.loads(mock_complete.call_args.args[2])
+        sent = payload["candidates"][0]
+        assert sent["created"] == "2019-12-05"
+        assert sent["pushed"] == "2021-03-25"
+        assert sent["topics"] == ["graphs"]
+        assert "created around or after the paper" in mock_complete.call_args.args[1]
+
+
 # ── enrich_archive ────────────────────────────────────────────
 
 def _write_archive(path, data):

@@ -65,7 +65,11 @@ REPO_PICK_SYSTEM = (
     "You link scientific papers to their official code repositories. Given a "
     "paper and candidate GitHub repositories, pick the one repository that is "
     "the authors' official implementation. Third-party reimplementations, "
-    "awesome lists, and repos that merely cite the paper do not count. Reply "
+    "awesome lists, and repos that merely cite the paper do not count. The "
+    "official repo is typically named after the paper's system and created "
+    "around or after the paper; a candidate created or last pushed years "
+    "before the paper is usually an unrelated older project that shares the "
+    "name by coincidence. Reply "
     'with JSON: {"repo": "owner/name", "reason": "short justification"}. Use '
     "an empty repo string when none of the candidates is official."
 )
@@ -205,6 +209,9 @@ def _llm_pick(paper: dict, candidates: list[dict], model: str,
             {
                 "repo": c.get("full_name") or "",
                 "stars": c.get("stargazers_count") or 0,
+                "created": str(c.get("created_at") or "")[:10],
+                "pushed": str(c.get("pushed_at") or "")[:10],
+                "topics": c.get("topics") or [],
                 "description": c.get("description") or "",
             }
             for c in candidates
