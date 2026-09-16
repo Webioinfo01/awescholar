@@ -1,8 +1,8 @@
 # Changelog
 
-## Unreleased
+## v0.2.2
 
-Citation-surface + GitHub-enrichment release — the website shows a citation badge under Paper, `updater citations` fills empty counts, `updater enrich` links papers to their official GitHub repositories with live star counts, and `updater export-agentx` turns repo-backed papers into candidate agents for an AgentX-style registry.
+Citation-surface + GitHub-enrichment release — the website shows a citation badge under Paper, `updater search` records carry Semantic Scholar citation counts, `updater citations` fills empty counts, `updater enrich` links papers to their official GitHub repositories with live star counts, and `updater export-agentx` turns repo-backed papers into candidate agents for an AgentX-style registry.
 
 ### Highlights
 
@@ -22,18 +22,9 @@ Citation-surface + GitHub-enrichment release — the website shows a citation ba
 - The persisted `archived` flag lets the agentx registry's lifecycle pass mark owner-archived repos `gone` in the same run instead of waiting for `pushedAt` to age out
 - `updater export-agentx` writes `counts.gone` (the agentx `SnapshotFile` contract; was `graveyard`) and prefers the archive's full `authors` list over the legacy `team` value when building `paperMeta`
 - GitHub 403/429 responses now print a stderr warning instead of silently degrading to "no results", so a rate-limited run is distinguishable from an empty one
-- Search now stores the complete Semantic Scholar author list in a new `authors` field instead of keeping only the last author as `team`: `updater search` records and the crawler DB carry the full name list, normalization accepts both the DB blob (`all`) and plain-list forms so the list survives merging into project data, and archive merges treat an empty list as empty so gaps never wipe an existing list (project data records are now 13 fields)
+- `updater search` (by title or DOI) requests `citationCount` and writes it into each record as `citations`, so `--json-file` output and archive additions carry live citation counts; the alias map accepts `citations`, `citationCount`, and `citation_count`, and archive merges keep existing counts when the incoming value is empty. `citations` is data-only — the README table gains no column
+- Search now stores the complete Semantic Scholar author list in a new `authors` field instead of keeping only the last author as `team`: `updater search` records and the crawler DB carry the full name list, normalization accepts both the DB blob (`all`) and plain-list forms so the list survives merging into project data, and archive merges treat an empty list as empty so gaps never wipe an existing list (project data records are now 13 fields, the updater pipeline 15)
 
-
-## v0.2.2
-
-Citation-metadata release — `updater search` records now carry the Semantic Scholar `citationCount`, and the `citations` field survives the whole curation pipeline.
-
-### Highlights
-
-- `updater search` (by title or DOI) now requests `citationCount` and writes it into each record as `citations`, so `--json-file` output and archive additions carry live citation counts
-- The `citations` field joins both paper schemas: project data (`data.json`, now 12 fields) and the updater pipeline (`updater.json` / `updater_filter.json`, now 14 fields); the alias map accepts `citations`, `citationCount`, and `citation_count`, and archive merges keep existing counts when the incoming value is empty
-- The README table is unchanged — `citations` is data-only and does not add a column
 
 ## v0.2.1
 
