@@ -91,6 +91,9 @@ awescholar --config config.json crawler run
 
 # 或直接传入搜索词
 awescholar --config config.json crawler run "perturbation prediction|single cell" --date 2025-01-01:2025-05-30
+
+# 月报：--month 自动推导日期区间、输出目录（month_reports/YYMM）和报告文件名
+awescholar --config config.json crawler run --month 2026-05
 ```
 
 Semantic Scholar API key 按以下顺序读取：`--ss-api-key` 命令行参数 > config.json 中的 `semantic_scholar.api_key` > 环境变量 `SEMANTIC_SCHOLAR_API_KEY`（兼容旧名 `SEMANTICSCHOLAR_API_KEY`）。 任何地方都找不到 key 时，awescholar 会向 stderr 输出警告并回退到匿名免费 tier。
@@ -208,11 +211,14 @@ awescholar crawler filter --input updater.json        # 从自定义 JSON 筛选
 awescholar crawler report                             # 生成报告（输出到 stdout）
 awescholar crawler report updater_filter.json -o report.md  # 从自定义 JSON 生成报告
 awescholar crawler run ["query"]                      # 完整流水线（如 config 已设 query 则可省略）
+awescholar crawler run --month 2026-05                # 某个月的完整流水线 -> month_reports/2605/report.md
 
 # 存档管理
 awescholar updater update --direction new2old --input X --archive data.json  # 合并到项目数据 JSON（疑似重复会被拦下）
 awescholar updater update --direction new2old --input X --archive data.json --no-dedupe  # 全部合入，跳过重复检测
 awescholar updater dedupe --review output/dedupe_review.json --archive data.json --keep published  # 处理被拦下的重复对
+awescholar updater digest --archive data.json --month 2026-05   # 当月入库论文摘要 -> month_reports/2605/digest.md
+awescholar updater digest --archive data.json --month 2026-05 --no-llm   # 仅表格，无需模型 key
 awescholar updater readme --archive data.json         # 生成 README 表格（自动备份）
 awescholar updater readme --archive data.json --no-backup  # 生成 README 不备份
 awescholar updater counts --archive data.json         # 刷新 website-first README 的论文计数
@@ -231,6 +237,10 @@ awescholar reader stats --archive data.json           # 存档统计
 ```
 
 每个子命令都支持 `--input`（report 用位置参数）指定输入文件，无需重跑完整流水线即可独立执行任意步骤。
+
+`crawler run --month 2026-05` 取代"每月复制一份 config"的做法：一个参数自动推导搜索日期（`2026-05-01:2026-05-31`，闰年自动处理）、输出目录（`month_reports/2605`）和报告文件名（`report.md`），一份入库的基础 config 可服务所有月份。`--month` 与 `--date` 互斥。报告默认写到 `{db_path}/report.md` —— 模型名不再进入文件名，改为写在报告开头的溯源注释里（记录 awescholar 版本、模型、日期范围）。`updater digest --month 2026-05` 是月报的另一面：按 `year` 字段总结 `data.json` 里当月已策展的论文，配置了模型就生成 LLM 叙述，加 `--no-llm` 则输出结构化表格 —— 适合发布与主库实际内容始终一致的月度摘要。
+
+筛选步骤先看选题契合、再看质量：主题落在研究兴趣之外的论文（只是共用 LLM 这类技术、应用在无关领域）无论发表在什么期刊都会被排除；`filter.limit` 是上限不是配额，合格论文不足时就少收。
 
 `reader` 命令是策展存档的只读查询面：关键词检索（`query`）、为种子论文找相关工作（`related`，支持 `--input` 喂入粘贴的摘要）、按研究领域生成必读清单（`recommend`，离线或 `--llm`）、存档统计（`stats`）。它们不修改数据、不需要 config，AI agent 可以即时回答"我的库里有哪些关于 X 的论文"。`updater update` 合并时，标题与库内已有条目高度相似的论文（预印本/正式版的典型特征）会被拦到输入文件旁的 `dedupe_review.json`，用 `updater dedupe --keep newer|published|both` 处理，`--no-dedupe` 可跳过检测。
 

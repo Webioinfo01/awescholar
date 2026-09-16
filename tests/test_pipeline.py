@@ -263,7 +263,7 @@ def test_run_annotate_extracts_team_and_affiliation_from_authors(monkeypatch):
     assert paper["affiliation"] == "The University of Tokyo"
 
 
-def test_run_filter_sends_affiliation_to_llm(monkeypatch):
+def test_run_filter_sends_domain_and_affiliation_to_llm(monkeypatch):
     captured = {}
 
     def fake_complete(*, system, user, **kwargs):
@@ -284,6 +284,7 @@ def test_run_filter_sends_affiliation_to_llm(monkeypatch):
                 {
                     "doi": "10.1/a",
                     "title": "Paper A",
+                    "domain": "LLM agent for proteomics",
                     "venue": "TestConf",
                     "affiliation": "Stanford University",
                 }
@@ -292,7 +293,41 @@ def test_run_filter_sends_affiliation_to_llm(monkeypatch):
         model="openai/test-model",
     )
 
-    assert captured["payload"]["papers"]["AI Agents"][0]["affiliation"] == "Stanford University"
+    sent = captured["payload"]["papers"]["AI Agents"][0]
+    assert sent["affiliation"] == "Stanford University"
+    assert sent["domain"] == "LLM agent for proteomics"
+
+
+def test_run_filter_allows_fewer_papers_than_limit(monkeypatch):
+    def fake_complete(**kwargs):
+        return FilterResult(papers={})
+
+    monkeypatch.setattr(pipeline, "complete", fake_complete)
+
+    filtered = pipeline.run_filter(
+        {
+            "AI Agents": [
+                {"doi": "10.1/a", "title": "Paper A", "venue": "TestConf"}
+            ]
+        },
+        model="openai/test-model",
+        limit=20,
+    )
+
+    assert filtered == {}
+
+
+def test_run_report_prepends_provenance_comment(monkeypatch):
+    monkeypatch.setattr(pipeline, "complete", lambda **kwargs: "# Report")
+
+    report = pipeline.run_report(
+        {"AI Agents": []}, model="openai/glm-5.3", date_range="2026-05-01:2026-05-31"
+    )
+
+    assert report.startswith("<!-- awescholar ")
+    assert "model: glm-5.3" in report
+    assert "scope: 2026-05-01:2026-05-31" in report
+    assert report.endswith("# Report")
 
 
 def test_run_filter_preserves_project_data_fields(monkeypatch):

@@ -8,6 +8,7 @@ import sys
 from . import __version__
 from .archive import DateEncoder
 from .config import load_config, resolve_agent_config, warn_missing_github_token
+from .months import month_date_range, month_report_dir, parse_month
 
 
 def get_version() -> str:
@@ -18,11 +19,30 @@ def status(msg: str) -> None:
     print(f"  -> {msg}")
 
 
+def _apply_month(args: argparse.Namespace, config: dict) -> int | None:
+    """Derive the date range and db_path from --month; returns 1 on a bad value."""
+    month = getattr(args, "month", None)
+    if not month:
+        return None
+    try:
+        year, mon = parse_month(month)
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    config["publication_date"] = month_date_range(year, mon)
+    config["db_path"] = month_report_dir(year, mon)
+    status(f"--month {year:04d}-{mon:02d}: dates {config['publication_date']}, "
+           f"output {config['db_path']}/")
+    return None
+
+
 # ── Subcommands ──────────────────────────────────────────────
 
 def cmd_search(args: argparse.Namespace, config: dict) -> int | None:
     from .pipeline import run_search
 
+    if _apply_month(args, config):
+        return 1
     papers = run_search(
         query=args.query,
         db_path=config["db_path"],
@@ -127,6 +147,8 @@ def cmd_report(args: argparse.Namespace, config: dict) -> int | None:
 def cmd_run(args: argparse.Namespace, config: dict) -> int | None:
     from .pipeline import run_pipeline
 
+    if _apply_month(args, config):
+        return 1
     query = args.query or config.get("search_query")
     if not query and not config.get("skip_search"):
         print("Error: query is required (via CLI arg or config search.query)")
@@ -152,11 +174,8 @@ def cmd_run(args: argparse.Namespace, config: dict) -> int | None:
         status_cb=status,
     )
 
-    output = args.output or config.get("report_filename")
-    if not output:
-        reporter_model, _, _ = resolve_agent_config(config, "reporter")
-        model_suffix = reporter_model.split("/")[-1]
-        output = os.path.join(config["db_path"], f"research_report_{model_suffix}.md")
+    output = args.output or config.get("report_filename") \
+        or os.path.join(config["db_path"], "report.md")
     os.makedirs(os.path.dirname(output) or ".", exist_ok=True)
     with open(output, "w", encoding="utf-8") as f:
         f.write(report)
@@ -330,6 +349,36 @@ def cmd_export_agentx(args: argparse.Namespace, config: dict) -> int | None:
     )
 
 
+def cmd_digest(args: argparse.Namespace, config: dict) -> int | None:
+    from .digest import run_digest, write_digest
+
+    try:
+        year, month = parse_month(args.month)
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    if not os.path.exists(args.archive):
+        print(f"Error: archive not found: {args.archive}", file=sys.stderr)
+        return 1
+
+    model = api_key = base_url = None
+    if not args.no_llm and config.get("api_key"):
+        model, api_key, base_url = resolve_agent_config(config, "reporter")
+
+    try:
+        markdown = run_digest(
+            archive_path=args.archive, year=year, month=month,
+            model=model or "", api_key=api_key, base_url=base_url, status_cb=status,
+        )
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    output = args.output or os.path.join(month_report_dir(year, month), "digest.md")
+    write_digest(markdown, output)
+    print(f"\nDigest saved to {output}")
+
+
 def cmd_add(args: argparse.Namespace, config: dict) -> int | None:
     from .record import add_interactive
 
@@ -473,7 +522,11 @@ def main() -> int:
     p = crawler_sub.add_parser("search", help="Search Semantic Scholar for papers")
     p.add_argument("query", type=str, help="Search query string")
     p.add_argument("--limit", type=int, help="Max results (default: 100)")
-    p.add_argument("--date", type=str, help="Date range, e.g. 2025-01-01:2025-05-30")
+    when = p.add_mutually_exclusive_group()
+    when.add_argument("--date", type=str, help="Date range, e.g. 2025-01-01:2025-05-30")
+    when.add_argument("--month", type=str,
+                      help="Calendar month YYYY-MM, e.g. 2026-05 — sets the date range "
+                           "and writes to month_reports/YYMM")
 
     p = crawler_sub.add_parser("annotate", help="Annotate papers with domain and category")
     p.add_argument("--input", type=str, help="Path to papers JSON (default: read from DB)")
@@ -490,7 +543,11 @@ def main() -> int:
     p.add_argument("query", type=str, nargs="?", help="Search query string (or set in config)")
     p.add_argument("--limit-search", type=int, help="Max search results (default: 100)")
     p.add_argument("--limit-filter", type=int, help="Papers to keep after filter (default: 20)")
-    p.add_argument("--date", type=str, help="Date range, e.g. 2025-01-01:2025-05-30")
+    when = p.add_mutually_exclusive_group()
+    when.add_argument("--date", type=str, help="Date range, e.g. 2025-01-01:2025-05-30")
+    when.add_argument("--month", type=str,
+                      help="Calendar month YYYY-MM, e.g. 2026-05 — sets the date range, "
+                           "db_path (month_reports/YYMM), and the report name (report.md)")
     p.add_argument("-o", "--output", type=str, help="Report output path")
 
     # updater
@@ -572,6 +629,14 @@ def main() -> int:
                    help="Comma-separated archive categories to export (default: all)")
     p.add_argument("--exclude-snapshot", type=str,
                    help="agentx agents-snapshot.json whose repos are skipped as already registered")
+
+    p = updater_sub.add_parser("digest", help="Summarize archive papers from one month as a Markdown digest")
+    p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")
+    p.add_argument("--month", type=str, required=True, help="Month to summarize, e.g. 2026-05")
+    p.add_argument("-o", "--output", type=str,
+                   help="Output file (default: month_reports/YYMM/digest.md)")
+    p.add_argument("--no-llm", action="store_true",
+                   help="Skip the LLM narrative; emit tables only (no model key needed)")
 
     p = updater_sub.add_parser("counts", help="Refresh website-first README paper counts from project data JSON")
     p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")
@@ -672,7 +737,7 @@ def main() -> int:
             "search": cmd_search_record, "add": cmd_add, "backfill": cmd_backfill,
             "citations": cmd_citations,
             "counts": cmd_counts, "dedupe": cmd_dedupe, "enrich": cmd_enrich,
-            "export-agentx": cmd_export_agentx,
+            "export-agentx": cmd_export_agentx, "digest": cmd_digest,
         }
         return handlers[args.updater_command](args, config) or 0
 

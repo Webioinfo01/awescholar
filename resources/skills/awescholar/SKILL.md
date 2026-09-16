@@ -16,8 +16,10 @@ Match the user's intent to a task domain, then follow the workflow below.
 | "Create a new awesome paper list repo", "scaffold a curated list" | Init | `awescholar init <dir> --title ... --github-repo ... --website ...` |
 | "Search for papers about X", "find recent papers" | Crawler Pipeline | `awescholar --config cfg.json crawler search "query"` |
 | "Run the full discovery pipeline" | Crawler Pipeline | `awescholar --config cfg.json crawler run "query"` |
+| "Monthly report for 2026-05", "跑上个月的月报" | Crawler Month | `awescholar --config cfg.json crawler run --month 2026-05` |
 | "Update the project", "full update", "merge and update" | Updater Full | `updater update` → `updater counts` (website-first) or `updater readme` (tables) → `updater rss` |
 | "Merge new results into project data", "update the archive" | Updater Merge | `awescholar updater update --direction new2old --input X --archive Y` |
+| "Digest the archive for a month", "当月入库论文摘要" | Updater Digest | `awescholar updater digest --archive docs/data.json --month 2026-05` |
 | "Update the README table" | Updater README | `awescholar updater readme --archive data.json` |
 | "Refresh README paper counts" | Updater Counts | `awescholar updater counts --archive docs/data.json` |
 | "Generate RSS feed" | Updater RSS | `awescholar updater rss --archive data.json` |
@@ -78,6 +80,9 @@ Use when discovering and curating new papers. Each step can run independently wi
 # Full pipeline (search + annotate + filter + report)
 awescholar --config cfg.json crawler run "AI agent" --limit 50 --date 2025-01-01:2025-05-30 -o report.md
 
+# Monthly run: one argument derives dates, output dir, and report name
+awescholar --config cfg.json crawler run --month 2026-05   # -> month_reports/2605/report.md
+
 # Step-by-step
 awescholar --config cfg.json crawler search "AI agent" --limit 100 --date 2025-01-01:2025-05-30
 awescholar --config cfg.json crawler annotate                       # reads from DB
@@ -92,6 +97,20 @@ Pipeline config flow control:
 - `use_updater_json: true` — skip annotate, do filter + report
 - `use_filtered_json: true` — skip to report only
 - `merge_new_to_old: true` + `data_json_path` — auto-merge filtered results into project data JSON after filter step
+
+With `--month`, the config's `search.publication_date` and `output.db_path` are overridden by the derived month values — keep ONE tracked base config in the repo and pass the month per run. The default report filename is `{db_path}/report.md` (the model name lives in a provenance comment inside the report, not the filename). The filter gates on scope before quality: off-scope papers are excluded regardless of venue, and fewer papers than `filter.limit` is a normal outcome — do not re-run to force a count.
+
+### Updater Digest
+
+Use when producing a monthly summary of what the curated archive actually holds, instead of running a fresh discovery pipeline.
+
+```bash
+# LLM narrative when a model is configured; tables-only with --no-llm
+awescholar updater digest --archive docs/data.json --month 2026-05            # -> month_reports/2605/digest.md
+awescholar updater digest --archive docs/data.json --month 2026-05 --no-llm   # offline, no model key needed
+```
+
+Selection is by each record's `year` field (`2026.05`, unpadded `2026.5` also matches). An empty month fails with an actionable error — check `--month` or the records' `year` fields before retrying.
 
 ### Updater Merge
 
