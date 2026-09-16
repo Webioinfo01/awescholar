@@ -120,7 +120,7 @@ awescholar --ss-api-key "your-key" crawler search "AI agent" --limit 10
 1. `~/.config/awescholar/config.json` — 全局默认值。把共享的 `model_profiles`、`semantic_scholar`、`github` 条目放这里一次即可。
 2. `--config` 传入的项目配置文件（如 `month_reports/config.json`）— 按项目覆盖：搜索词和日期、filter 设置、输出路径、分类，以及 `model.profile`/`model.name` 的选择。
 
-从 [repo 根目录](https://github.com/Webioinfo01/awescholar/blob/main/config.example.json) 复制 `config.example.json` 到上面任一位置并填入你的值 — 或直接设置环境变量，跳过配置文件。不带 `--config` 运行的命令只使用全局文件，因此 `enrich`、`export-agentx` 这类只依赖 key 的命令可以开箱即用。
+从 [repo 根目录](https://github.com/Webioinfo01/awescholar/blob/main/config.example.json) 复制 `config.example.json` 到上面任一位置并填入你的值 — 或直接设置环境变量，跳过配置文件。不带 `--config` 运行的命令只使用全局文件，因此 `enrich`、`render agentx` 这类只依赖 key 的命令可以开箱即用。
 
 ```json
 {
