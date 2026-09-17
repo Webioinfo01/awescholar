@@ -28,7 +28,7 @@ A lightweight CLI that automates the paper curation workflow: query Semantic Sch
 
 awescholar now serves two orientations with one tool — **paper-oriented awesome lists** (data.json archive: crawler → updater → render → reader) and the **project-oriented AgentX hub** (data/agents-snapshot.json snapshot: updater --agentx commands + verify). The same entity is both a paper record and an agent record; `render agentx` bridges them.
 
-> **Deprecation notice:** the standalone `agentx-cli` (npm `agentx-hub-cli`) is deprecated as of awescholar 0.3.0. All its commands now live here.
+> **Deprecation notice:** the standalone `agentx-cli` (npm `agentx-hub-cli`) is deprecated as of awescholar 0.2.6. All its commands now live here.
 
 ## Powered by awescholar
 

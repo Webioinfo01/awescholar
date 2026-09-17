@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.3.0 - 2026-09-17
+## v0.2.6 - 2026-09-18
 
 AgentX absorption release — the standalone agentx-cli (TypeScript) is fully replaced by awescholar, one tool for both orientations: awesome-list projects are paper-oriented (the archive is a category dict of paper records) and the AgentX hub is project-oriented (the snapshot is a slug-sorted agent list keyed by GitHub repo). The registry logic — tag policy, lifecycle rules, writer invariants — now lives in `awescholar.agentx`, and every former agentx-cli command has an awescholar equivalent. No Node runtime, no subprocess bridge, no shape-sniffing version detection.
 

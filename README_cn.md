@@ -28,7 +28,7 @@
 
 awescholar 用一套工具服务两种项目取向 — **论文取向的 awesome 列表**（data.json 存档：crawler → updater → render → reader）和**项目取向的 AgentX 集线器**（data/agents-snapshot.json 快照：updater --agentx 命令 + verify）。同一个实体既是一条论文记录，也是一条 agent 记录；`render agentx` 负责两者之间的投影。
 
-> **弃用通知：** 独立的 `agentx-cli`（npm `agentx-hub-cli`）自 awescholar 0.3.0 起弃用，其全部命令已并入本工具。
+> **弃用通知：** 独立的 `agentx-cli`（npm `agentx-hub-cli`）自 awescholar 0.2.6 起弃用，其全部命令已并入本工具。
 
 ## awescholar 驱动的项目
 
