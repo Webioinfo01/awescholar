@@ -18,6 +18,8 @@ import os
 import re
 import shlex
 
+from pydantic import BaseModel
+
 from .github import fetch_repo, owner_repo_from_url, stars_from_repo
 
 
@@ -32,6 +34,27 @@ def _first_author(team: str) -> str:
         if separator in team:
             return team.split(separator)[0].strip()
     return team.strip()
+
+
+# Words that mark a title prefix as a descriptive phrase, not a system name.
+_NAME_STOPWORDS = frozenset([
+    "a", "an", "the", "for", "with", "of", "and", "in", "using",
+    "toward", "towards", "via", "by", "on", "to", "from"])
+
+
+def _system_name(title: str) -> str | None:
+    """Leading system name of a paper title: "MutexaGPT: an intuition-to-design
+    translator..." -> "MutexaGPT". Name-shaped prefixes only — short, free of
+    articles, connectors, and commas — so descriptive prefixes ("Bridging the
+    Computational-Experimental Gap: ...") return None and the caller falls
+    back to the repo name."""
+    prefix = (title or "").split(":", 1)[0].strip() if title and ":" in title else ""
+    words = prefix.split()
+    if not words or len(words) > 4 or "," in prefix:
+        return None
+    if any(w.lower() in _NAME_STOPWORDS for w in words):
+        return None
+    return prefix
 
 
 def _archive_stars(value) -> int:
@@ -89,6 +112,58 @@ def _load_snapshot(path: str) -> tuple[set[str], set[str]]:
     return repos, categories
 
 
+# --- LLM category pass -------------------------------------------------------
+
+class _CategoryPick(BaseModel):
+    repo: str
+    category: str
+
+
+class _CategoryPicks(BaseModel):
+    picks: list[_CategoryPick]
+
+
+_CATEGORY_SYSTEM = (
+    "You classify AI-agent research tools into a fixed registry taxonomy. "
+    "For each candidate repo pick exactly one allowed category slug, judged "
+    "by what a user would open the repo for. Pick 'others' only when nothing "
+    'fits. Answer with JSON: {"picks": [{"repo": "owner/name", "category": "slug"}]}.')
+
+
+def _classify_categories(agents: list[dict], known_categories: set[str],
+                         model: str, api_key: str | None, base_url: str | None,
+                         status_cb=print, complete_fn=None) -> dict[str, str]:
+    """LLM pick of an agentx category per candidate, as a repo->slug map.
+
+    A pick is kept only when its slug is in the known set, so a hallucinated
+    category can never reach the intake script. Slugs or repos the model
+    leaves out are simply absent — the caller keeps the mapped default."""
+    if complete_fn is None:
+        from .llm import complete as complete_fn
+    picks: dict[str, str] = {}
+    allowed = ", ".join(sorted(known_categories))
+    batch = 25
+    for i in range(0, len(agents), batch):
+        chunk = agents[i:i + batch]
+        lines = "\n".join(
+            f"- {a['repo']} :: {(a.get('paperMeta') or {}).get('title', '')}"
+            f" :: {a.get('description') or ''}" for a in chunk)
+        try:
+            result = complete_fn(model=model, system=_CATEGORY_SYSTEM,
+                                 user=f"Allowed category slugs: {allowed}\n"
+                                      f"Candidates (repo :: paper title :: repo description):\n{lines}",
+                                 response_format=_CategoryPicks,
+                                 api_key=api_key, base_url=base_url)
+        except Exception as exc:  # noqa: BLE001 - an LLM hiccup must not kill the export
+            status_cb(f"  Warning: LLM category pass failed ({exc}); keeping defaults")
+            return picks
+        if isinstance(result, _CategoryPicks):
+            for pick in result.picks:
+                if pick.category in known_categories:
+                    picks[pick.repo.lower()] = pick.category
+    return picks
+
+
 def _intake_command(agent: dict) -> str:
     """One `pnpm agent:add` line the target agentx repo can run as-is.
 
@@ -112,12 +187,18 @@ def export_agentx(archive_path: str, output_path: str, token: str | None = None,
                   source: str = "awescholar", source_url: str | None = None,
                   categories: list[str] | None = None,
                   exclude_snapshot: str | None = None, emit: str = "json",
+                  llm_model: str | None = None, llm_api_key: str | None = None,
+                  llm_base_url: str | None = None, classify_fn=None,
                   status_cb=print) -> dict:
     """Write an AgentX-shaped candidate file from papers with GitHub repos.
 
     `emit="json"` (default) writes the snapshot-shaped candidate JSON;
     `emit="commands"` writes an executable shell script of `pnpm agent:add`
     intake lines — one per candidate — for the last mile into an agentx repo.
+
+    With `llm_model` set (and a snapshot for the category list), each
+    candidate's agentx category is picked by the configured model instead of
+    relying on the static map + default fallback.
     """
     category_map = category_map or {}
     with open(archive_path, "r", encoding="utf-8") as f:
@@ -160,7 +241,10 @@ def export_agentx(archive_path: str, output_path: str, token: str | None = None,
             seen_repos.add(owner_repo.lower())
 
             repo = fetch_repo(owner_repo, token) if token else None
-            name = (repo or {}).get("name") or owner_repo.split("/")[1]
+            # The paper's system name ("MutexaGPT", from the title) is the
+            # display name agents are known by; the repo segment is a fallback.
+            name = (_system_name(str(p.get("title") or ""))
+                    or (repo or {}).get("name") or owner_repo.split("/")[1])
             slug = agentx_slugify(name)
             while slug in used_slugs:
                 slug = f"{slug}-2"
@@ -188,6 +272,22 @@ def export_agentx(archive_path: str, output_path: str, token: str | None = None,
                 "source": source,
                 "sourceUrl": source_url,
             })
+
+    if llm_model and known_categories and agents:
+        picks = (classify_fn or _classify_categories)(
+            agents, known_categories, llm_model, llm_api_key, llm_base_url,
+            status_cb=status_cb)
+        applied = 0
+        for a in agents:
+            slug = picks.get(a["repo"].lower())
+            if slug:
+                a["category"] = slug
+                applied += 1
+        status_cb(f"  LLM category pass classified {applied}/{len(agents)} candidates "
+                  "(the rest keep the mapped/default category)")
+    elif llm_model:
+        status_cb("  Warning: --llm-category needs --exclude-snapshot for the "
+                  "category list; keeping mapped/default categories")
 
     if emit == "commands":
         lines = [

@@ -300,3 +300,84 @@ def test_emit_commands_writes_intake_script():
         assert "--description" not in text
         assert stats["exported"] == 1
         assert os.access(out, os.X_OK)
+
+
+def test_export_names_agent_from_leading_title_system_name():
+    # "MutexaGPT: an intuition-to-design translator..." -> name "MutexaGPT";
+    # the repo segment (EnzyHTP-GPT) is only the fallback.
+    with tempfile.TemporaryDirectory() as tmp:
+        archive = os.path.join(tmp, "data.json")
+        out = os.path.join(tmp, "candidates.json")
+        paper = _paper(
+            title="MutexaGPT: an intuition-to-design translator for physics-based enzyme engineering.",
+            codeUrl="https://github.com/ChemBioHTP/EnzyHTP-GPT")
+        with open(archive, "w", encoding="utf-8") as f:
+            json.dump({"AI Agents": [paper]}, f)
+
+        export_agentx(archive, out, token=None, status_cb=lambda *_: None)
+
+        with open(out, encoding="utf-8") as f:
+            agent = json.load(f)["agents"][0]
+        assert agent["repo"] == "ChemBioHTP/EnzyHTP-GPT"
+        assert agent["name"] == "MutexaGPT"
+        assert agent["slug"] == "mutexagpt"
+
+
+def test_export_keeps_repo_name_when_title_prefix_is_descriptive():
+    # A descriptive prefix ("Bridging the ... Gap: ...") is not a system
+    # name — fall through to the repo segment instead.
+    with tempfile.TemporaryDirectory() as tmp:
+        archive = os.path.join(tmp, "data.json")
+        out = os.path.join(tmp, "candidates.json")
+        paper = _paper(
+            title="Bridging the Computational-Experimental Gap: Leveraging LLMs for Protein Design",
+            codeUrl="https://github.com/example/ProteinBridge")
+        with open(archive, "w", encoding="utf-8") as f:
+            json.dump({"AI Agents": [paper]}, f)
+
+        export_agentx(archive, out, token=None, status_cb=lambda *_: None)
+
+        with open(out, encoding="utf-8") as f:
+            agent = json.load(f)["agents"][0]
+        assert agent["name"] == "ProteinBridge"
+
+
+def test_llm_category_pass_overrides_mapped_default():
+    with tempfile.TemporaryDirectory() as tmp:
+        archive = os.path.join(tmp, "data.json")
+        snap = os.path.join(tmp, "snapshot.json")
+        out = os.path.join(tmp, "candidates.json")
+        paper = _paper(
+            title="MutexaGPT: an intuition-to-design translator for physics-based enzyme engineering.",
+            codeUrl="https://github.com/ChemBioHTP/EnzyHTP-GPT")
+        with open(archive, "w", encoding="utf-8") as f:
+            json.dump({"AI Agents": [paper]}, f)
+        with open(snap, "w", encoding="utf-8") as f:
+            json.dump({"agents": [{"repo": "some/other", "category": "chem-drug"}]}, f)
+
+        export_agentx(archive, out, token=None, exclude_snapshot=snap,
+                      llm_model="test-model",
+                      classify_fn=lambda *a, **k: {"chembiohtp/enzyhtp-gpt": "chem-drug"},
+                      status_cb=lambda *_: None)
+
+        with open(out, encoding="utf-8") as f:
+            agent = json.load(f)["agents"][0]
+        assert agent["category"] == "chem-drug"
+
+
+def test_classify_categories_drops_hallucinated_slugs():
+    from awescholar.agentx_export import _CategoryPick, _CategoryPicks, _classify_categories
+
+    def fake_complete(**kwargs):
+        assert "chem-drug" in kwargs["user"]  # allowed slugs are in the prompt
+        return _CategoryPicks(picks=[
+            _CategoryPick(repo="one/Agent", category="chem-drug"),
+            _CategoryPick(repo="one/Agent", category="made-up-slug"),  # hallucinated
+            _CategoryPick(repo="ghost/Repo", category="bio-omics"),    # not a candidate
+        ])
+
+    agents = [{"repo": "one/Agent", "paperMeta": {"title": "t"}, "description": "d"}]
+    picks = _classify_categories(agents, {"chem-drug", "bio-omics"}, "m", None, None,
+                                 status_cb=lambda *_: None, complete_fn=fake_complete)
+    # last valid pick wins per repo; the unknown repo never enters
+    assert picks == {"one/agent": "chem-drug", "ghost/repo": "bio-omics"}

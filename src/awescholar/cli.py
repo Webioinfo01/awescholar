@@ -392,13 +392,23 @@ def cmd_export_agentx(args: argparse.Namespace, config: dict) -> int | None:
             print(f"Error reading category map {args.category_map}: {exc}", file=sys.stderr)
             return 1
 
+    llm_model = llm_api_key = llm_base_url = None
+    if args.llm_category:
+        llm_model, llm_api_key, llm_base_url = resolve_agent_config(config, "annotator")
+        if not llm_api_key:
+            print("Error: --llm-category needs a model API key (set --config or AWESCHOLAR_API_KEY).",
+                  file=sys.stderr)
+            return 1
+
     export_agentx(
         archive_path=args.archive, output_path=args.output,
         token=config.get("github_token"), category_map=category_map,
         default_category=args.default_category, source=args.source,
         source_url=args.source_url,
         categories=args.categories.split(",") if args.categories else None,
-        exclude_snapshot=args.exclude_snapshot, emit=args.emit, status_cb=status,
+        exclude_snapshot=args.exclude_snapshot, emit=args.emit,
+        llm_model=llm_model, llm_api_key=llm_api_key, llm_base_url=llm_base_url,
+        status_cb=status,
     )
 
 
@@ -730,6 +740,9 @@ def main() -> int:
                    help="agentx agents-snapshot.json whose repos are skipped as already registered")
     p.add_argument("--emit", choices=["json", "commands"], default="json",
                    help="Output shape: candidate JSON (default) or a shell script of pnpm agent:add intake lines")
+    p.add_argument("--llm-category", action="store_true",
+                   help="classify each candidate's agentx category with the configured model "
+                        "(needs --exclude-snapshot for the category list)")
 
     # reader
     reader = sub.add_parser("reader", help="Read-only queries over the project data JSON")
