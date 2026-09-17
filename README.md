@@ -1,6 +1,6 @@
 <div align="center">
   <img src="./logo/hero.png" alt="awescholar" width="800">
-  <h1>awescholar: Scientific Literature Curator <a href="https://github.com/Webioinfo01/aweskill"><img src="https://raw.githubusercontent.com/Webioinfo01/aweskill/main/logo/aweskill-badge2.svg" alt="aweskill companion"></a></h1>
+  <h1>awescholar: Scientific Literature Curator <a href="https://github.com/wehuman01/aweskill"><img src="https://raw.githubusercontent.com/wehuman01/aweskill/main/logo/aweskill-badge2.svg" alt="aweskill companion"></a></h1>
   <p><strong>AI-agent-operable scientific literature discovery and curation.</strong></p>
   <p>Search, annotate, filter, and report on academic papers — tell your agent to do it, or run the CLI yourself.</p>
   <p>
@@ -17,7 +17,7 @@
     <img src="https://img.shields.io/badge/install-pip-22C55E?style=flat-square" alt="pip install">
     <img src="https://img.shields.io/badge/platform-cli-334155?style=flat-square" alt="Platform">
     <img src="https://img.shields.io/pypi/dm/awescholar?style=flat-square" alt="PyPI downloads">
-    <img src="https://img.shields.io/github/stars/Webioinfo01/awescholar?style=flat-square" alt="GitHub stars">
+    <img src="https://img.shields.io/github/stars/wehuman01/awescholar?style=flat-square" alt="GitHub stars">
   </p>
 </div>
 
@@ -37,7 +37,7 @@ A lightweight CLI that automates the paper curation workflow: query Semantic Sch
 If you are working inside Claude Code, Codex, Cursor, or another coding agent, tell it:
 
 ```text
-Read https://github.com/Webioinfo01/awescholar/blob/main/README.ai.md and follow it to install awescholar for this agent.
+Read https://github.com/wehuman01/awescholar/blob/main/README.ai.md and follow it to install awescholar for this agent.
 ```
 
 The agent will first install the `awescholar` CLI, then choose one of two awescholar skill management options:
@@ -53,7 +53,7 @@ pip install awescholar
 
 ## Supported by aweskill
 
-awescholar is powered by [aweskill](https://github.com/Webioinfo01/aweskill) — a CLI-first skill package manager that AI agents can operate themselves. aweskill handles skill installation, updates, projection, and backup across 47+ coding agents including Claude Code, Codex, Cursor, Gemini CLI, and more.
+awescholar is powered by [aweskill](https://github.com/wehuman01/aweskill) — a CLI-first skill package manager that AI agents can operate themselves. aweskill handles skill installation, updates, projection, and backup across 47+ coding agents including Claude Code, Codex, Cursor, Gemini CLI, and more.
 
 ## Usage
 
@@ -120,7 +120,7 @@ Config resolves in two layers, deep-merged so the project file only overrides wh
 1. `~/.config/awescholar/config.json` — global defaults. Put shared `model_profiles`, `semantic_scholar`, and `github` entries here once.
 2. The `--config` file (e.g. `month_reports/config.json`) — per-project overrides: search query and dates, filter settings, output paths, categories, and the `model.profile`/`model.name` choice.
 
-Copy `config.example.json` from the [repo root](https://github.com/Webioinfo01/awescholar/blob/main/config.example.json) to either location and fill in your values — or set env vars directly and skip the config files. Commands run without `--config` use the global file alone, so key-dependent commands like `enrich` and `render agentx` work out of the box.
+Copy `config.example.json` from the [repo root](https://github.com/wehuman01/awescholar/blob/main/config.example.json) to either location and fill in your values — or set env vars directly and skip the config files. Commands run without `--config` use the global file alone, so key-dependent commands like `enrich` and `render agentx` work out of the box.
 
 ```json
 {
@@ -343,12 +343,12 @@ awescholar is part of a growing family of "awesome" tools — CLI-first, local-f
 ### CLI Tools
 
 - **[aweskill](https://aweskill.webioinfo.top/)** — CLI-first skill package manager supporting 47+ AI coding agents.
-- **[aweswitch](https://github.com/Webioinfo01/aweswitch)** — Agent profile switcher for Claude Code, Codex, and OpenCode.
-- **[awerouter](https://github.com/mugpeng/awerouter)** — Smart router that splits requests between Flash and Pro models using structural signals, cutting unnecessary model spend.
-- **[aweshelf](https://github.com/Webioinfo01/aweshelf)** — Bookmark, categorize, and restore AI coding sessions; pairs with aweswitch to save profiles and launch with one command.
+- **[aweswitch](https://github.com/wehuman01/aweswitch)** — Agent profile switcher for Claude Code, Codex, and OpenCode.
+- **[awerouter](https://github.com/wehuman01/awerouter)** — Smart router that splits requests between Flash and Pro models using structural signals, cutting unnecessary model spend.
+- **[aweshelf](https://github.com/wehuman01/aweshelf)** — Bookmark, categorize, and restore AI coding sessions; pairs with aweswitch to save profiles and launch with one command.
 - **[aweshare](https://github.com/wehuman01/aweshare)** — Share local Ollama/vLLM backends, domestic coding plans, or authorized OpenAI/Anthropic subscriptions through a self-hosted hub — a sharing economy for tokens.
 - **[awewarm](https://github.com/wehuman01/awewarm)** — Subscription window warmer that keeps AI coding-plan windows active, for local setups and through a remote hub server.
-- **[awescholar](https://github.com/Webioinfo01/awescholar)** — AI-agent-operable scientific literature discovery and curation.
+- **[awescholar](https://github.com/wehuman01/awescholar)** — AI-agent-operable scientific literature discovery and curation.
 
 ### Desktop Apps
 

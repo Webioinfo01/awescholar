@@ -1,6 +1,6 @@
 <div align="center">
   <img src="./logo/hero.png" alt="awescholar" width="800">
-  <h1>awescholar: Scientific Literature Curator <a href="https://github.com/Webioinfo01/aweskill"><img src="https://raw.githubusercontent.com/Webioinfo01/aweskill/main/logo/aweskill-badge2.svg" alt="aweskill companion"></a></h1>
+  <h1>awescholar: Scientific Literature Curator <a href="https://github.com/wehuman01/aweskill"><img src="https://raw.githubusercontent.com/wehuman01/aweskill/main/logo/aweskill-badge2.svg" alt="aweskill companion"></a></h1>
   <p><strong>AI agent 可自主执行的科学文献发现与策展。</strong></p>
   <p>搜索、标注、筛选和报告学术论文 — 告诉你的 agent 去做，或者自己跑 CLI。</p>
   <p>
@@ -17,7 +17,7 @@
     <img src="https://img.shields.io/badge/install-pip-22C55E?style=flat-square" alt="pip install">
     <img src="https://img.shields.io/badge/platform-cli-334155?style=flat-square" alt="Platform">
     <img src="https://img.shields.io/pypi/dm/awescholar?style=flat-square" alt="PyPI downloads">
-    <img src="https://img.shields.io/github/stars/Webioinfo01/awescholar?style=flat-square" alt="GitHub stars">
+    <img src="https://img.shields.io/github/stars/wehuman01/awescholar?style=flat-square" alt="GitHub stars">
   </p>
 </div>
 
@@ -37,7 +37,7 @@
 如果你在 Claude Code、Codex、Cursor 等 coding agent 中工作，直接告诉它：
 
 ```text
-Read https://github.com/Webioinfo01/awescholar/blob/main/README.ai.md and follow it to install awescholar for this agent.
+Read https://github.com/wehuman01/awescholar/blob/main/README.ai.md and follow it to install awescholar for this agent.
 ```
 
 Agent 会先安装 `awescholar` CLI，然后在下面两种 awescholar skill 管理方式中选择一种：
@@ -53,7 +53,7 @@ pip install awescholar
 
 ## aweskill 支持
 
-awescholar 由 [aweskill](https://github.com/Webioinfo01/aweskill) 驱动 — 一个以 CLI 为核心的 Skill 包管理器，AI agent 也能自己调用和维护。aweskill 负责 skill 的安装、更新、投影和备份，支持 47+ 编程 agent，包括 Claude Code、Codex、Cursor、Gemini CLI 等。
+awescholar 由 [aweskill](https://github.com/wehuman01/aweskill) 驱动 — 一个以 CLI 为核心的 Skill 包管理器，AI agent 也能自己调用和维护。aweskill 负责 skill 的安装、更新、投影和备份，支持 47+ 编程 agent，包括 Claude Code、Codex、Cursor、Gemini CLI 等。
 
 ## 使用
 
@@ -120,7 +120,7 @@ awescholar --ss-api-key "your-key" crawler search "AI agent" --limit 10
 1. `~/.config/awescholar/config.json` — 全局默认值。把共享的 `model_profiles`、`semantic_scholar`、`github` 条目放这里一次即可。
 2. `--config` 传入的项目配置文件（如 `month_reports/config.json`）— 按项目覆盖：搜索词和日期、filter 设置、输出路径、分类，以及 `model.profile`/`model.name` 的选择。
 
-从 [repo 根目录](https://github.com/Webioinfo01/awescholar/blob/main/config.example.json) 复制 `config.example.json` 到上面任一位置并填入你的值 — 或直接设置环境变量，跳过配置文件。不带 `--config` 运行的命令只使用全局文件，因此 `enrich`、`render agentx` 这类只依赖 key 的命令可以开箱即用。
+从 [repo 根目录](https://github.com/wehuman01/awescholar/blob/main/config.example.json) 复制 `config.example.json` 到上面任一位置并填入你的值 — 或直接设置环境变量，跳过配置文件。不带 `--config` 运行的命令只使用全局文件，因此 `enrich`、`render agentx` 这类只依赖 key 的命令可以开箱即用。
 
 ```json
 {
@@ -342,12 +342,12 @@ awescholar 是一个不断壮大的 "awesome" 工具家族中的一员 — 围�
 ### CLI 工具
 
 - **[aweskill](https://aweskill.webioinfo.top/)** — CLI 优先的技能包管理器，支持 47+ AI 编程 agent。
-- **[aweswitch](https://github.com/Webioinfo01/aweswitch)** — Claude Code、Codex、OpenCode 的 agent 配置切换器。
-- **[awerouter](https://github.com/mugpeng/awerouter)** — 智能路由器，用结构信号把请求分给 Flash 或 Pro 模型，减少不必要的模型开销。
-- **[aweshelf](https://github.com/Webioinfo01/aweshelf)** — 收藏、分类、恢复 AI 编程会话，还能搭配 aweswitch 实现保存配置，一键启动。
+- **[aweswitch](https://github.com/wehuman01/aweswitch)** — Claude Code、Codex、OpenCode 的 agent 配置切换器。
+- **[awerouter](https://github.com/wehuman01/awerouter)** — 智能路由器，用结构信号把请求分给 Flash 或 Pro 模型，减少不必要的模型开销。
+- **[aweshelf](https://github.com/wehuman01/aweshelf)** — 收藏、分类、恢复 AI 编程会话，还能搭配 aweswitch 实现保存配置，一键启动。
 - **[aweshare](https://github.com/wehuman01/aweshare)** — 通过自建 Hub 共享本地 Ollama/vLLM，或国产厂商 coding plan，或已授权的 OpenAI/Anthropic 帐号订阅，实现 token 的共享经济。
 - **[awewarm](https://github.com/wehuman01/awewarm)** — 订阅窗口保持器，让 AI 编程套餐的窗口持续激活，无论是本地设置，还是通过远程连接的服务器。
-- **[awescholar](https://github.com/Webioinfo01/awescholar)** — AI agent 可自主执行的科学文献发现与策展，搜索、标注、筛选和报告学术论文。
+- **[awescholar](https://github.com/wehuman01/awescholar)** — AI agent 可自主执行的科学文献发现与策展，搜索、标注、筛选和报告学术论文。
 
 ### 桌面应用
 

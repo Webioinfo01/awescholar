@@ -13,7 +13,7 @@ import urllib.parse
 import urllib.request
 
 API_BASE = "https://api.github.com"
-USER_AGENT = "awescholar (https://github.com/Webioinfo01/awescholar)"
+USER_AGENT = "awescholar (https://github.com/wehuman01/awescholar)"
 SEARCH_TIMEOUT_SECONDS = 20
 REPO_TIMEOUT_SECONDS = 15
 # Search is the scarce budget (10/min anonymous, 30/min authenticated);

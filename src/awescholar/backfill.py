@@ -37,7 +37,7 @@ CROSSREF_URL = "https://api.crossref.org/works/{doi}"
 OPENALEX_PER_BATCH = 50
 OPENALEX_TIMEOUT_SECONDS = 20
 OPENALEX_URL = "https://api.openalex.org/works"
-OPENALEX_UA = "awescholar-backfill (https://github.com/Webioinfo01/awescholar)"
+OPENALEX_UA = "awescholar-backfill (https://github.com/wehuman01/awescholar)"
 AFFILIATION_MAX_CHARS = 200
 
 _INSTITUTION_HINTS = (
@@ -148,7 +148,7 @@ def _crossref_last_author(doi: str) -> dict | None:
     """
     req = urllib.request.Request(
         CROSSREF_URL.format(doi=doi),
-        headers={"User-Agent": "awescholar-backfill (https://github.com/Webioinfo01/awescholar)"},
+        headers={"User-Agent": "awescholar-backfill (https://github.com/wehuman01/awescholar)"},
     )
     try:
         with urllib.request.urlopen(req, timeout=CROSSREF_TIMEOUT_SECONDS) as resp:

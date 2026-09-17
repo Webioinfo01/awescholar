@@ -24,7 +24,7 @@ from .utils import matches_only
 
 DEFAULT_REVIEW_FILENAME = "publish_review.json"
 CROSSREF_SEARCH_URL = "https://api.crossref.org/works"
-CROSSREF_UA = "awescholar-publish-scan (https://github.com/Webioinfo01/awescholar)"
+CROSSREF_UA = "awescholar-publish-scan (https://github.com/wehuman01/awescholar)"
 CROSSREF_TIMEOUT_SECONDS = 20
 
 # Same thresholds the merge-time dedupe uses: a near-identical title alone is

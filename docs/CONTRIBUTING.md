@@ -3,7 +3,7 @@
 ## Development Setup
 
 ```bash
-git clone https://github.com/Webioinfo01/awescholar.git
+git clone https://github.com/wehuman01/awescholar.git
 cd awescholar
 pip install -e ".[dev]"
 pytest

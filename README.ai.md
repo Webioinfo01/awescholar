@@ -67,7 +67,7 @@ aweskill store init
 ##### A3. Install awescholar skill from GitHub
 
 ```bash
-aweskill install Webioinfo01/awescholar
+aweskill install wehuman01/awescholar
 ```
 
 ##### A4. Identify the current agent
@@ -126,7 +126,7 @@ If the agent is not in this list, ask the user where to place the skill file.
 
 ```bash
 mkdir -p <skill-directory>
-curl -fsSL https://raw.githubusercontent.com/Webioinfo01/awescholar/main/resources/skills/awescholar/SKILL.md -o <skill-directory>/SKILL.md
+curl -fsSL https://raw.githubusercontent.com/wehuman01/awescholar/main/resources/skills/awescholar/SKILL.md -o <skill-directory>/SKILL.md
 ```
 
 Replace `<skill-directory>` with the path from step B1.
@@ -143,10 +143,10 @@ After installing the CLI and skill, set up the config file before running any pi
 cp config.example.json config.json
 ```
 
-`config.example.json` is in the [awescholar repo root](https://github.com/Webioinfo01/awescholar/blob/main/config.example.json). If the repo is not available locally, download it:
+`config.example.json` is in the [awescholar repo root](https://github.com/wehuman01/awescholar/blob/main/config.example.json). If the repo is not available locally, download it:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Webioinfo01/awescholar/main/config.example.json -o config.json
+curl -fsSL https://raw.githubusercontent.com/wehuman01/awescholar/main/config.example.json -o config.json
 ```
 
 #### 2. Set API keys
@@ -166,7 +166,7 @@ Key fields to check:
 - **`search.query`** — default search terms
 - **`search.publication_date`** — date range filter
 
-See the [Detailed Config](https://github.com/Webioinfo01/awescholar#detailed-config) section in the README for the full reference.
+See the [Detailed Config](https://github.com/wehuman01/awescholar#detailed-config) section in the README for the full reference.
 
 ---
 

@@ -20,8 +20,8 @@ DEFAULT_CONTACT_EMAIL = "yc47680@um.edu.mo"
 DEFAULT_CATEGORIES = ["AI Agents", "Foundation models", "Databases/Simulation", "Benchmarks", "Reviews"]
 
 AWESKILL_BADGE_HTML = (
-    ' <a href="https://github.com/Webioinfo01/aweskill">'
-    '<img src="https://raw.githubusercontent.com/Webioinfo01/aweskill/main/logo/aweskill-badge2.svg"'
+    ' <a href="https://github.com/wehuman01/aweskill">'
+    '<img src="https://raw.githubusercontent.com/wehuman01/aweskill/main/logo/aweskill-badge2.svg"'
     ' alt="aweskill companion"></a>'
 )
 
