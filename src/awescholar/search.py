@@ -7,6 +7,7 @@ from semanticscholar import SemanticScholar
 
 from .config import ss_env_api_key, warn_missing_ss_key
 from .db import Paper, get_session
+from .utils import retry_with_backoff
 
 
 def search_papers(
@@ -44,7 +45,8 @@ def search_papers(
     sch = SemanticScholar(api_key=api_key) if api_key else SemanticScholar()
 
     try:
-        results = sch.search_paper(
+        results = retry_with_backoff(
+            sch.search_paper,
             query,
             fields=fields,
             fields_of_study=fields_of_study,

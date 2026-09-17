@@ -13,6 +13,7 @@ from awescholar.record import (
     _normalize_code_url,
     _save_flat_json,
     search_and_add,
+    search_by_doi,
 )
 
 # ── _load_flat_json / _save_flat_json ──────────────────────────
@@ -378,3 +379,50 @@ def test_annotate_failure_still_saves_record(MockSS, mock_run_annotate):
         assert papers[0]["title"] == "Fail Paper"
         assert papers[0]["domain"] == ""
         assert "abstract" not in papers[0]
+
+
+# ── addedAt provenance ─────────────────────────────────────────
+
+@patch("builtins.input", side_effect=["My Paper Title", ""])
+@patch("awescholar.record.SemanticScholar")
+def test_search_and_add_stamps_addedat(MockSS, mock_input):
+    mock_client = MagicMock()
+    MockSS.return_value = mock_client
+    mock_client.search_paper.return_value = _mock_paper(title="My Paper Title", doi="10.1/mp")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        json_file = os.path.join(tmp, "papers.json")
+        search_and_add(json_file=json_file, by="title")
+
+        papers = json.load(open(json_file))
+        assert papers[0]["addedAt"], "addedAt must be stamped on insert"
+        assert papers[0]["addedAt"].startswith("20")
+
+
+@patch("builtins.input", side_effect=["My Paper Title", ""])
+@patch("awescholar.record.SemanticScholar")
+def test_search_by_doi_falls_back_to_local_cache(MockSS, mock_input, tmp_path, monkeypatch):
+    """SS DOI 404 (new bioRxiv prefix) → resolve from month_reports pipeline outputs."""
+    mock_client = MagicMock()
+    MockSS.return_value = mock_client
+    mock_client.get_paper.side_effect = Exception("404 Not Found")
+
+    month_dir = tmp_path / "month_reports" / "2601"
+    month_dir.mkdir(parents=True)
+    (month_dir / "updater_filter.json").write_text(json.dumps({
+        "AI Agents": [{
+            "doi": "10.64898/2026.01.27.702049",
+            "title": "Agentomics: an agentic system",
+            "venue": "bioRxiv",
+            "publicationDate": "2026-01-27",
+            "abstract": "Automation of biomedical ML.",
+        }],
+    }))
+    monkeypatch.chdir(tmp_path)
+
+    record = search_by_doi("10.64898/2026.01.27.702049", mock_client)
+
+    assert record is not None
+    assert record["title"] == "Agentomics: an agentic system"
+    assert record["paperUrl"] == "https://doi.org/10.64898/2026.01.27.702049"
+    assert record["year"] == "2026.01"

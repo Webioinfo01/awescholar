@@ -2,12 +2,19 @@
 
 import json
 import os
+import sqlite3
+from pathlib import Path
 
 from semanticscholar import SemanticScholar
 
 from .categories import canonicalize_category
 from .config import ss_env_api_key, warn_missing_ss_key
-from .data_fields import normalize_title
+from .data_fields import normalize_title, utc_now_iso
+from .utils import retry_with_backoff
+
+
+def _now_iso() -> str:
+    return utc_now_iso()
 
 FIELDS = [
     "year", "title", "team", "team website", "affiliation",
@@ -82,7 +89,8 @@ def search_by_title(title: str, sch: SemanticScholar) -> dict | None:
     if not title.strip():
         return None
     try:
-        paper = sch.search_paper(
+        paper = retry_with_backoff(
+            sch.search_paper,
             title, limit=1, match_title=True,
             fields=["paperId", "title", "venue", "year",
                     "publicationDate", "authors", "externalIds", "url", "journal",
@@ -94,20 +102,107 @@ def search_by_title(title: str, sch: SemanticScholar) -> dict | None:
         return None
 
 
+def _lookup_doi_local(doi: str) -> dict | None:
+    """Find a DOI in recent pipeline outputs under cwd.
+
+    Walks ``month_reports/*/papers.db`` and ``month_reports/*/updater_filter.json``
+    to find papers the crawler already saw. This rescues lookups that
+    Semantic Scholar hasn't fully indexed yet (e.g. the new bioRxiv
+    ``10.64898`` prefix), where the pipeline saved the paper but a fresh
+    DOI lookup returns 404.
+    """
+    needle = doi.strip().lower()
+    if not needle:
+        return None
+    # Prefer the most recent pipeline output when multiple match.
+    best: dict | None = None
+    for db in sorted(Path(".").glob("month_reports/*/papers.db"), reverse=True):
+        try:
+            with sqlite3.connect(db) as con:
+                row = con.execute(
+                    "SELECT title, abstract, year, venue, citation_count "
+                    "FROM papers WHERE LOWER(doi)=?",
+                    (needle,),
+                ).fetchone()
+            if row and row[0]:
+                best = {
+                    "title": row[0], "abstract": row[1] or "",
+                    "year": row[2] or "", "venue": row[3] or "",
+                    "citationCount": row[4],
+                    "_source": str(db),
+                }
+                break
+        except Exception:  # noqa: BLE001 — corrupt db must not abort the lookup
+            continue
+    if best is None:
+        for jf in sorted(Path(".").glob("month_reports/*/updater_filter.json"), reverse=True):
+            try:
+                data = json.loads(jf.read_text())
+            except Exception:
+                continue
+            for cat, papers in (data.items() if isinstance(data, dict) else []):
+                if not isinstance(papers, list):
+                    continue
+                for p in papers:
+                    if isinstance(p, dict) and (p.get("doi") or "").lower() == needle:
+                        best = {**p, "_source": str(jf)}
+                        break
+                if best:
+                    break
+            if best:
+                break
+    return best
+
+
+def _local_doi_record(doi: str, found: dict) -> dict:
+    """Build a record-shaped payload from a cached lookup row."""
+    pub_date = found.get("publicationDate") or found.get("publication_date") or ""
+    year = ""
+    if isinstance(pub_date, str) and pub_date:
+        year = pub_date[:7].replace("-", ".")
+    elif found.get("year"):
+        year = str(found["year"])
+    return {
+        "year": year,
+        "title": found.get("title") or "",
+        "team": "",
+        "authors": [],
+        "team website": "",
+        "affiliation": "",
+        "domain": "",
+        "venue": found.get("venue") or "",
+        "paperUrl": f"https://doi.org/{doi}",
+        "codeUrl": "",
+        "githubStars": "",
+        "citations": found.get("citationCount") or found.get("citation_count"),
+        "doi": doi,
+        "abstract": found.get("abstract") or "",
+    }
+
+
 def search_by_doi(doi: str, sch: SemanticScholar) -> dict | None:
     if not doi.strip():
         return None
     try:
-        paper = sch.get_paper(
+        paper = retry_with_backoff(
+            sch.get_paper,
             f"DOI:{doi}",
             fields=["paperId", "title", "venue", "year",
                     "publicationDate", "authors", "externalIds", "url", "journal",
                     "citationCount", "abstract"],
         )
-        return _paper_to_record(paper)
+        rec = _paper_to_record(paper)
+        if rec and rec.get("title"):
+            return rec
+        print("  Not found in Semantic Scholar; trying local cache...")
     except Exception as e:  # noqa: BLE001 — one failed lookup must not abort the batch
         print(f"  Error: {e}")
-        return None
+        print("  Falling back to local cache...")
+    local = _lookup_doi_local(doi)
+    if local:
+        print(f"  Resolved from local cache: {local.get('_source')}")
+        return _local_doi_record(doi, local)
+    return None
 
 
 def _load_archive(archive_path: str) -> dict | list:
@@ -317,6 +412,7 @@ def search_and_add(
             for record in added_records:
                 _apply_code(record, norm_code_url, stars_style)
                 record.pop("abstract", None)
+                record.setdefault("addedAt", _now_iso())
                 papers_list.append(record)
             _save_flat_json(json_file, papers_list)
             print(f"\nAdded {stats['added']} paper(s) to {json_file}")
@@ -370,6 +466,7 @@ def search_and_add(
             for record in added_records:
                 _apply_code(record, norm_code_url, stars_style)
                 record.pop("abstract", None)
+                record.setdefault("addedAt", _now_iso())
                 archive[target].append(record)
             _save_archive(archive_path, archive)
             print(f"\nAdded {stats['added']} paper(s) to {archive_path}")

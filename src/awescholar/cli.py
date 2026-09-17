@@ -8,7 +8,14 @@ import sys
 from . import __version__
 from .archive import DateEncoder
 from .config import load_config, resolve_agent_config, warn_missing_github_token
-from .months import month_date_range, month_report_dir, parse_month
+from .months import (
+    month_date_range,
+    month_report_dir,
+    parse_month,
+    parse_period,
+    period_date_range,
+    period_report_dir,
+)
 
 
 def get_version() -> str:
@@ -36,12 +43,29 @@ def _apply_month(args: argparse.Namespace, config: dict) -> int | None:
     return None
 
 
+def _apply_when(args: argparse.Namespace, config: dict) -> int | None:
+    """Derive date range and db_path from --month or --period; 1 on a bad value."""
+    period = getattr(args, "period", None)
+    if period:
+        try:
+            year, mon, half = parse_period(period)
+        except ValueError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        config["publication_date"] = period_date_range(year, mon, half)
+        config["db_path"] = period_report_dir(year, mon, half)
+        status(f"--period {period}: dates {config['publication_date']}, "
+               f"output {config['db_path']}/")
+        return None
+    return _apply_month(args, config)
+
+
 # ── Subcommands ──────────────────────────────────────────────
 
 def cmd_search(args: argparse.Namespace, config: dict) -> int | None:
     from .pipeline import run_search
 
-    if _apply_month(args, config):
+    if _apply_when(args, config):
         return 1
     papers = run_search(
         query=args.query,
@@ -147,7 +171,7 @@ def cmd_report(args: argparse.Namespace, config: dict) -> int | None:
 def cmd_run(args: argparse.Namespace, config: dict) -> int | None:
     from .pipeline import run_pipeline
 
-    if _apply_month(args, config):
+    if _apply_when(args, config):
         return 1
     query = args.query or config.get("search_query")
     if not query and not config.get("skip_search"):
@@ -236,10 +260,30 @@ def cmd_dedupe(args: argparse.Namespace, config: dict) -> int | None:
 
 
 def cmd_publish_scan(args: argparse.Namespace, config: dict) -> int | None:
-    from .publish_scan import DEFAULT_REVIEW_FILENAME, apply_review, publish_scan
+    from .publish_scan import DEFAULT_REVIEW_FILENAME, apply_review, publish_scan, queue_pair
 
     review_path = args.review or os.path.join(
         os.path.dirname(args.archive) or ".", DEFAULT_REVIEW_FILENAME)
+
+    if getattr(args, "pair", None):
+        if len(args.pair) != 2:
+            print("Error: --pair needs exactly two DOIs: --pair PREPRINT_PUBLISHED",
+                  file=sys.stderr)
+            return 1
+        try:
+            queue_pair(args.archive, args.pair[0], args.pair[1],
+                       api_key=config["ss_api_key"], review_path=review_path)
+        except ValueError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        if args.apply:
+            applied = apply_review(review_path, args.archive, no_backup=args.no_backup)
+            upgraded = sum(1 for a in applied if a["resolution"].startswith("upgraded"))
+            print(f"Upgraded {upgraded} preprint(s) in {args.archive}")
+            if upgraded:
+                print(f"Next  : awescholar render counts --archive {args.archive}")
+                print(f"        awescholar render rss --archive {args.archive} -o docs/rss.xml")
+        return None
 
     if args.apply and os.path.exists(review_path) and args.review:
         # Two-step flow: apply a reviewed file without rescanning.
@@ -366,7 +410,7 @@ def cmd_enrich(args: argparse.Namespace, config: dict) -> int | None:
         model=model or "", api_key=api_key, base_url=base_url,
         use_llm=not args.no_llm, limit=args.limit,
         no_backup=args.no_backup, status_cb=status,
-        only=args.only, stars_style=stars_style,
+        only=args.only, since=getattr(args, "since", None), stars_style=stars_style,
     )
     if args.agentx:
         suffix = ""
@@ -590,6 +634,9 @@ def main() -> int:
     when.add_argument("--month", type=str,
                       help="Calendar month YYYY-MM, e.g. 2026-05 — sets the date range "
                            "and writes to month_reports/YYMM")
+    when.add_argument("--period", type=str,
+                      help="Half-month YYYY-MM-P (P=1|2), e.g. 2026-06-1 — days 01–15 or "
+                           "16–end; writes to month_reports/YYMM_P")
 
     p = crawler_sub.add_parser("annotate", help="Annotate papers with domain and category")
     p.add_argument("--input", type=str, help="Path to papers JSON (default: read from DB)")
@@ -611,6 +658,10 @@ def main() -> int:
     when.add_argument("--month", type=str,
                       help="Calendar month YYYY-MM, e.g. 2026-05 — sets the date range, "
                            "db_path (month_reports/YYMM), and the report name (report.md)")
+    when.add_argument("--period", type=str,
+                      help="Half-month YYYY-MM-P (P=1|2), e.g. 2026-06-1 — sets the date "
+                           "range (01–15 or 16–end), db_path (month_reports/YYMM_P), and "
+                           "the report name (report.md)")
     p.add_argument("-o", "--output", type=str, help="Report output path")
 
     # updater — every subcommand mutates the project data JSON (or its review files)
@@ -643,6 +694,9 @@ def main() -> int:
                    help="Review file path (default: publish_review.json next to the archive)")
     p.add_argument("--only", action="append",
                    help="Scope to entries whose DOI equals this or whose title contains it (repeatable)")
+    p.add_argument("--pair", type=str, nargs=2, metavar=("PREPRINT", "PUBLISHED"),
+                   help="Manual pair for retitled work no database links: queue the upgrade "
+                        "from these two DOIs instead of scanning (add --apply to upgrade at once)")
     p.add_argument("--limit", type=int, help="Check at most N preprints (default: all)")
     p.add_argument("--no-title-search", action="store_true",
                    help="Only verify by DOI; skip the title-search fallback for DOI misses")
@@ -681,6 +735,10 @@ def main() -> int:
     p.add_argument("--limit", type=int, help="Resolve at most N papers without a repo (metrics refresh is unbounded; ignored in --agentx)")
     p.add_argument("--only", action="append",
                    help="Scope to entries whose DOI equals this or whose title contains it (repeatable)")
+    p.add_argument("--since", type=str, metavar="YYYY-MM-DD",
+                   help="Scope to entries added on/after this date (needs addedAt, written by "
+                        "updater search/update since this release); legacy entries without "
+                        "addedAt are always included")
     p.add_argument("--stars-style", choices=["badge", "numeric"],
                    help="githubStars shape this archive keeps (default: archive.stars_style config, else numeric)")
     p.add_argument("--no-llm", action="store_true",

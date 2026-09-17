@@ -80,6 +80,11 @@ def _call_sch(fn, *args, **kwargs):
             raise RuntimeError("Semantic Scholar API 403. Check your API key.") from e
         if "429" in msg:
             raise RuntimeError("Semantic Scholar rate limit (429). Wait and retry.") from e
+        # The batch endpoint 400s with "No valid paper ids given" when not one
+        # id in the request resolves (e.g. a scope of single unindexed DOIs);
+        # treat the chunk as not-found so Crossref/OpenAlex still run.
+        if "no valid paper ids" in msg.lower():
+            return []
         raise
 
 

@@ -177,3 +177,115 @@ def test_cli_update_and_dedupe_end_to_end():
         papers = _read(archive)["AI Agents"]
         assert len(papers) == 2, "unrelated paper + resolved duplicate"
         assert not os.path.exists(review)
+
+
+# ── the retitled pair: roster overlap carries a weak title ─────
+
+_DXD_ROSTER = ["Shicheng Xu", "Xin Huang", "Zihao Wei", "Liang Pang",
+               "Huawei Shen", "Xueqi Cheng"]
+
+RETTITLED_ARCHIVE = {
+    "AI Agents": [
+        {
+            "year": "2025.08",
+            "title": "Reverse Physician-AI Relationship: Full-process Clinical "
+                     "Diagnosis Driven by a Large Language Model",
+            "team": "Xueqi Cheng", "authors": _DXD_ROSTER,
+            "doi": "10.48550/arXiv.2508.10492", "venue": "arXiv",
+        }
+    ]
+}
+
+RETTITLED_PUBLISHED = {
+    "AI Agents": [
+        {
+            "year": "2026.04",
+            "title": "DxDirector: an agentic large language model driving the "
+                     "full-process clinical diagnosis",
+            "team": "Xueqi Cheng", "authors": _DXD_ROSTER,
+            "doi": "10.1038/s41467-026-71928-5", "venue": "Nature Communications",
+        }
+    ]
+}
+
+
+def test_rettitled_pair_held_back_by_roster_overlap():
+    """A journal that renames the work breaks every title threshold; the
+    surviving author roster must still hold the pair for review instead of
+    blindly appending a duplicate."""
+    with tempfile.TemporaryDirectory() as tmp:
+        new, archive = _setup(tmp, RETTITLED_PUBLISHED, RETTITLED_ARCHIVE)
+        merge_new_to_archive(new, archive)
+        review = _read(os.path.join(tmp, "dedupe_review.json"))
+        assert len(review) == 1
+        assert review[0]["title_similarity"] < 0.80  # the old gate missed this
+        assert review[0]["shared_authors"] >= 0.8
+        assert len(_read(archive)["AI Agents"]) == 1  # nothing appended
+
+
+def test_weak_title_with_thin_roster_merges_normally():
+    """Single-author records cannot trust surname overlap — a weak title with
+    no roster evidence still merges as a new paper."""
+    thin = {
+        "AI Agents": [{
+            "year": "2026.01", "title": "DxDirector: an agentic clinical model",
+            "team": "S. Solo", "authors": ["S. Solo"],
+            "doi": "10.1038/thin", "venue": "Nature Communications",
+        }]
+    }
+    with tempfile.TemporaryDirectory() as tmp:
+        new, archive = _setup(tmp, thin, RETTITLED_ARCHIVE)
+        merge_new_to_archive(new, archive)
+        assert len(_read(archive)["AI Agents"]) == 2
+        assert not os.path.exists(os.path.join(tmp, "dedupe_review.json"))
+
+
+# ── codeUrl collision hold-back ────────────────────────────────
+
+def test_code_collision_holds_back_retitled_published_version(tmp_path):
+    """A retitled published version pointing at the same official repo as an
+    archived preprint is held back with a codeUrl_collision marker — the
+    signal that survives title rewrites."""
+    archive = tmp_path / "data.json"
+    archive.write_text(json.dumps({
+        "AI Agents": [{
+            "year": "2025.06", "title": "Agentomics-ML: Autonomous Machine Learning",
+            "doi": "10.48550/arXiv.2506.05542", "venue": "arXiv",
+            "codeUrl": "https://github.com/BioGeMT/agentomics-ml",
+        }],
+    }))
+    incoming = tmp_path / "new.json"
+    incoming.write_text(json.dumps({
+        "AI Agents": [{
+            "year": "2026.01",
+            "title": "Agentomics: an agentic system for biomedical machine learning tasks",
+            "doi": "10.1093/bioinformatics/btag250", "venue": "Bioinformatics",
+            "codeUrl": "https://github.com/BioGeMT/agentomics-ml",
+        }],
+    }))
+
+    merge_new_to_archive(str(incoming), str(archive))
+
+    merged = json.loads(archive.read_text())
+    assert len(merged["AI Agents"]) == 1, "collision held back, not appended"
+    review = tmp_path / "dedupe_review.json"
+    assert review.exists()
+    item = json.loads(review.read_text())[0]
+    assert item["codeUrl_collision"] == "https://github.com/BioGeMT/agentomics-ml"
+
+
+def test_code_collision_not_flagged_without_dedupe(tmp_path):
+    archive = tmp_path / "data.json"
+    archive.write_text(json.dumps({
+        "AI Agents": [{"year": "2025", "title": "A", "codeUrl": "https://github.com/o/r"}],
+    }))
+    incoming = tmp_path / "new.json"
+    incoming.write_text(json.dumps({
+        "AI Agents": [{"year": "2026", "title": "B", "codeUrl": "https://github.com/o/r"}],
+    }))
+
+    merge_new_to_archive(str(incoming), str(archive), dedupe=False)
+
+    merged = json.loads(archive.read_text())
+    assert len(merged["AI Agents"]) == 2
+    assert not (tmp_path / "dedupe_review.json").exists()

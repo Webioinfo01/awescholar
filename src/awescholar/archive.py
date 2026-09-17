@@ -11,6 +11,7 @@ from .data_fields import (
     normalize_name,
     normalize_project_paper_fields,
     normalize_title,
+    utc_now_iso,
 )
 
 DEFAULT_REVIEW_FILENAME = "dedupe_review.json"
@@ -59,6 +60,36 @@ def _team_tokens(team) -> set[str]:
     return {t for t in normalize_name(team).split() if len(t) > 1}
 
 
+def _author_roster(paper: dict) -> set[str]:
+    """Normalized full author names for roster-overlap comparison."""
+    authors = paper.get("authors")
+    if not isinstance(authors, list):
+        return set()
+    return {normalize_name(a) for a in authors if normalize_name(a)}
+
+
+# A full retitle defeats every title signal, but the author roster survives:
+# below-threshold titles plus a near-identical roster (≥3 names) is the
+# retitled preprint/published signature.
+_ROSTER_MIN_NAMES = 3
+_ROSTER_OVERLAP_THRESHOLD = 0.75
+
+
+def _find_roster_overlap(entry: dict, archive_entries: list) -> list | None:
+    """Find an archive entry whose author roster almost fully overlaps."""
+    roster = _author_roster(entry)
+    if len(roster) < _ROSTER_MIN_NAMES:
+        return None
+    for item in archive_entries:
+        existing_roster = item[4] if len(item) > 4 else set()
+        if len(existing_roster) < _ROSTER_MIN_NAMES:
+            continue
+        overlap = len(roster & existing_roster) / min(len(roster), len(existing_roster))
+        if overlap >= _ROSTER_OVERLAP_THRESHOLD:
+            return item[:2]
+    return None
+
+
 def _find_fuzzy_duplicate(title: str, team: str, archive_entries: list) -> list | None:
     """Find a near-duplicate archive entry for a title that missed exact match.
 
@@ -79,6 +110,25 @@ def _find_fuzzy_duplicate(title: str, team: str, archive_entries: list) -> list 
         if sim > best_sim:
             best, best_sim = entry, sim
     return best
+
+
+def _find_code_collision(code_url: str, archive: dict) -> tuple[str, int, dict] | None:
+    """Find an archive entry already pointing at the same code repository.
+
+    Two different papers almost never share an official repo, so a codeUrl
+    collision is the strongest preprint-vs-published signal the archive
+    carries — stronger than title similarity, which title rewrites defeat.
+    Returns (category, index, entry) of the first matching entry, else None.
+    """
+    if not code_url:
+        return None
+    needle = code_url.rstrip("/").lower()
+    for category, papers in archive.items():
+        for i, p in enumerate(papers):
+            existing = str(p.get("codeUrl") or "").rstrip("/").lower()
+            if existing and existing == needle:
+                return category, i, p
+    return None
 
 
 def merge_new_to_archive(new_path: str, archive_path: str, *,
@@ -106,7 +156,8 @@ def merge_new_to_archive(new_path: str, archive_path: str, *,
 
     doi_index, title_index = _build_entry_indexes(archive)
     archive_entries = [
-        [category, i, normalize_title(p.get("title")), _team_tokens(p.get("team"))]
+        [category, i, normalize_title(p.get("title")), _team_tokens(p.get("team")),
+         _author_roster(p)]
         for category, papers in archive.items() for i, p in enumerate(papers)
     ]
     held_back = []
@@ -130,7 +181,7 @@ def merge_new_to_archive(new_path: str, archive_path: str, *,
             fuzzy = _find_fuzzy_duplicate(title, entry.get("team"), archive_entries) \
                 if dedupe else None
             if fuzzy is not None:
-                cat, i, _existing_title, existing_team = fuzzy
+                cat, i, _existing_title, existing_team, _existing_roster = fuzzy
                 held_back.append({
                     "incoming": entry,
                     "existing": {"category": cat, "index": i, "paper": archive[cat][i]},
@@ -141,6 +192,48 @@ def merge_new_to_archive(new_path: str, archive_path: str, *,
                 })
                 continue
 
+            # Same official repo, different title: the classic title-rewrite
+            # that dodges both exact and fuzzy matching. Hold back like a
+            # fuzzy duplicate so `updater dedupe --keep published` can split
+            # the preprint from the journal version.
+            collision = _find_code_collision(entry.get("codeUrl"), archive) \
+                if dedupe else None
+            if collision is not None:
+                cat, i, existing_paper = collision
+                held_back.append({
+                    "incoming": entry,
+                    "existing": {"category": cat, "index": i, "paper": existing_paper},
+                    "codeUrl_collision": entry.get("codeUrl"),
+                    "title_similarity": round(
+                        SequenceMatcher(None, title, normalize_title(
+                            existing_paper.get("title"))).ratio(), 3),
+                    "shared_team": bool(_team_tokens(entry.get("team"))
+                                        & _team_tokens(existing_paper.get("team"))),
+                })
+                continue
+
+            # Retitled pair with a near-identical author roster: the title
+            # bars are defeated by the rewrite, the roster is not.
+            roster = _find_roster_overlap(entry, archive_entries) if dedupe else None
+            if roster is not None:
+                cat, i = roster
+                existing_paper = archive[cat][i]
+                held_back.append({
+                    "incoming": entry,
+                    "existing": {"category": cat, "index": i, "paper": existing_paper},
+                    "shared_authors": round(
+                        len(_author_roster(entry) & _author_roster(existing_paper))
+                        / min(len(_author_roster(entry)), len(_author_roster(existing_paper))), 3),
+                    "title_similarity": round(
+                        SequenceMatcher(None, title, normalize_title(
+                            existing_paper.get("title"))).ratio(), 3),
+                    "shared_team": bool(_team_tokens(entry.get("team"))
+                                        & _team_tokens(existing_paper.get("team"))),
+                })
+                continue
+
+            if not entry.get("addedAt"):
+                entry["addedAt"] = utc_now_iso()
             archive[target_category].append(entry)
             pos = [target_category, len(archive[target_category]) - 1]
             if doi:

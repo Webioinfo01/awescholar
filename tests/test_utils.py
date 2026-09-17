@@ -4,9 +4,11 @@ import email.utils
 import json
 import os
 import re
+import subprocess
 import tempfile
 from datetime import UTC, datetime
 
+from awescholar.backup import backup_file
 from awescholar.utils import (
     generate_rss,
     matches_only,
@@ -638,3 +640,42 @@ def test_matches_only_empty_title_does_not_match_substring():
 def test_matches_only_any_pattern_sufficient():
     assert matches_only({"doi": "10.1/a", "title": "Paper A"}, ["10.1/b", "agent"]) is False
     assert matches_only({"doi": "10.1/a", "title": "Agent Paper"}, ["10.1/b", "agent"]) is True
+
+
+# ── backup_file: git-clean targets need no timestamped copy ────
+
+def _git(tmp, *args):
+    subprocess.run(["git", "-C", str(tmp), *args], check=True,
+                   capture_output=True)
+
+
+def test_backup_file_skips_git_clean_target(tmp_path):
+    target = tmp_path / "data.json"
+    target.write_text("{}")
+    _git(tmp_path, "init", "-q")
+    _git(tmp_path, "config", "user.email", "t@example.com")
+    _git(tmp_path, "config", "user.name", "t")
+    _git(tmp_path, "add", "data.json")
+    _git(tmp_path, "commit", "-qm", "init")
+
+    assert backup_file(str(target)) is None
+    assert not list(tmp_path.glob("data.json.*.bak"))
+
+    # once modified, the copy comes back — git no longer holds the current bytes
+    target.write_text('{"dirty": true}')
+    assert backup_file(str(target)).endswith(".bak")
+    assert list(tmp_path.glob("data.json.*.bak"))
+
+
+def test_backup_file_copies_outside_any_repo(tmp_path):
+    target = tmp_path / "data.json"
+    target.write_text("{}")
+    assert backup_file(str(target)).endswith(".bak")
+    assert list(tmp_path.glob("data.json.*.bak"))
+
+
+def test_backup_file_honors_no_backup(tmp_path):
+    target = tmp_path / "data.json"
+    target.write_text("{}")
+    assert backup_file(str(target), no_backup=True) is None
+    assert not list(tmp_path.glob("data.json.*.bak"))

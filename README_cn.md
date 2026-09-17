@@ -241,6 +241,7 @@ awescholar updater publish-scan --archive data.json   # 扫描库内预印本是
 awescholar updater publish-scan --archive data.json --apply  # 扫描并原地升级（venue/DOI/paperUrl/引用切换，策展字段保留）
 awescholar updater publish-scan --archive data.json --review publish_review.json --apply  # 只应用已审阅的队列，不重新扫描
 awescholar updater publish-scan --archive data.json --only XunZi --limit 5   # 按 DOI/标题子串限定，限制扫描数量
+awescholar updater publish-scan --archive data.json --pair 10.48550/arXiv.2508.10492 10.1038/x  # 手工配对：改题发表、数据库无关联的预印本/正式版
 awescholar updater search --json-file papers.json --by title   # 搜索并保存待审阅
 awescholar updater search --archive data.json --by title       # 搜索并直接添加
 awescholar updater search --archive data.json --category "AI Agents"  # 添加到指定分类
@@ -289,11 +290,11 @@ awescholar reader stats --archive data.json --category "AI Agents"   # 单分类
 
 `updater search` 写规范链接、也能直接携带已知事实：`paperUrl` 优先用 DOI 链接（`https://doi.org/…`）而非 Semantic Scholar 页面；`--code-url owner/repo` 把已知的仓库写进 `codeUrl`（`archive.stars_style: "badge"` 时同时写入 shields.io badge 到 `githubStars`）；`--annotate` 用配置的标注 LLM 为新增论文补写一句话 `domain` —— 与爬虫流水线同一个标注器，只跑新增的几条。论文落库后，`updater search --archive` 和 `updater update --direction new2old` 会打印下一步（`render counts` / `render rss`），README 计数和 RSS 不再悄悄过期。
 
-`reader` 命令是策展存档的只读查询面：关键词检索（`query`）、为种子论文找相关工作（`related`，支持 `--input` 喂入粘贴的摘要）、按研究领域生成必读清单（`recommend`，离线或 `--llm`）、存档统计（`stats`）。它们不修改数据、不需要 config，AI agent 可以即时回答"我的库里有哪些关于 X 的论文"。`updater update` 合并时，标题与库内已有条目高度相似的论文（预印本/正式版的典型特征）会被拦到输入文件旁的 `dedupe_review.json`，用 `updater dedupe --keep newer|published|both` 处理，`--no-dedupe` 可跳过检测。
+`reader` 命令是策展存档的只读查询面：关键词检索（`query`）、为种子论文找相关工作（`related`，支持 `--input` 喂入粘贴的摘要）、按研究领域生成必读清单（`recommend`，离线或 `--llm`）、存档统计（`stats`）。它们不修改数据、不需要 config，AI agent 可以即时回答"我的库里有哪些关于 X 的论文"。`updater update` 合并时，标题与库内已有条目高度相似的论文（预印本/正式版的典型特征）会被拦到输入文件旁的 `dedupe_review.json`；彻底改题、躲过标题门槛的配对，只要作者名单几乎完全重合同样会被拦下，用 `updater dedupe --keep newer|published|both` 处理，`--no-dedupe` 可跳过检测。
 
 `render readme` 只更新 `<!-- AWESCHOLAR:START -->` 和 `<!-- AWESCHOLAR:END -->` 之间的自动生成区域。这个区域包含 awescholar 生成的目录和分类表格。自定义标题、引用和项目介绍应放在 marker 外。已有 README 如果没有这些 marker，会直接报错，避免整文件覆盖。如果 README 还不存在，`--title` 用来控制生成文件的一级标题。
 
-`updater publish-scan` 是合并期去重的主动镜像：不等正式版作为新数据撞进来，而是主动扫描库内的预印本（按预印本服务器 DOI 前缀或 venue 识别 —— 新旧 bioRxiv/medRxiv、arXiv、ChemRxiv、Research Square、Preprints.org、Authorea、SSRN），逐条经三通道查证 —— Semantic Scholar 按 DOI、S2 模糊标题检索、再 Crossref `query.title`（预印本与正式版标题漂移是常态："AlphaFold3" vs "AlphaFold 3"），标题匹配的候选需同时过相似度门槛和非空 venue 门槛（挡掉复用原题的 ResearchHub 之类转载副本）—— 把可升级项排进存档旁的 `publish_review.json`。默认 dry run；`--apply` 原地升级 —— venue、DOI、paperUrl、年份、作者、引用切换为正式版，分类、codeUrl、githubStars、domain、affiliation 原样保留 —— `--review <file> --apply` 只应用已审阅队列不重扫。同一套修正后的预印本识别，也让 `updater dedupe --keep published` 在裁决时能正确让期刊版压过 bioRxiv 预印本。
+`updater publish-scan` 是合并期去重的主动镜像：不等正式版作为新数据撞进来，而是主动扫描库内的预印本（按预印本服务器 DOI 前缀或 venue 识别 —— 新旧 bioRxiv/medRxiv、arXiv、ChemRxiv、Research Square、Preprints.org、Authorea、SSRN），逐条经四通道查证 —— Semantic Scholar 按 DOI、S2 模糊标题检索、Crossref `query.title`、再走作者轨迹轮（预印本与正式版标题漂移是常态："AlphaFold3" vs "AlphaFold 3"；彻底改题则击穿一切标题信号 —— 数据库极少关联两个 DOI，但作者名单不变，扫描改挖预印本第一/末位作者自己的论文列表，找作者名单高度重合的已发表工作，以重合度加弱标题或摘要佐证为门）—— 标题匹配的候选需同时过相似度门槛和非空 venue 门槛（挡掉复用原题的 ResearchHub 之类转载副本）—— 把可升级项排进存档旁的 `publish_review.json`。默认 dry run；`--apply` 原地升级 —— venue、DOI、paperUrl、年份、作者、引用切换为正式版，分类、codeUrl、githubStars、domain、affiliation 原样保留 —— `--review <file> --apply` 只应用已审阅队列不重扫，归档在扫描后若有变动会按 DOI 重新定位条目。`--pair 预印本 正式版` 为扫描无法证明的改题孪生手工排队升级。同一套修正后的预印本识别，也让 `updater dedupe --keep published` 在裁决时能正确让期刊版压过 bioRxiv 预印本。
 
 当不指定 `--readme` 时，`render readme` 会自动发现当前工作目录下所有包含 `<!-- AWESCHOLAR:START -->` 标记的 `README*.md` / `readme*.md` 文件并逐一更新。这适用于维护多语言 README（如 `readme.md` + `README.zh-CN.md`）— 表格内容自动保持同步。
 

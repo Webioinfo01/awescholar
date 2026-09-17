@@ -1,6 +1,12 @@
 """Project data field normalization."""
 
 import ast
+from datetime import datetime, timezone
+
+
+def utc_now_iso() -> str:
+    """UTC timestamp for the addedAt provenance field."""
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def normalize_title(title) -> str:
@@ -21,6 +27,7 @@ PROJECT_PAPER_FIELDS = (
     "githubStars",
     "citations",
     "doi",
+    "addedAt",
 )
 
 UPDATER_PAPER_FIELDS = (
@@ -56,6 +63,7 @@ FIELD_ALIASES = {
     "githubStars": ("githubStars", "github_stars", "githubStarsUrl"),
     "citations": ("citations", "citationCount", "citation_count"),
     "doi": ("doi", "DOI"),
+    "addedAt": ("addedAt",),
     "reason_for_inclusion": ("reason_for_inclusion",),
 }
 

@@ -12,11 +12,10 @@ Only empty codeUrl fields are filled; entries never move between categories.
 
 import json
 import re
-import shutil
-from datetime import datetime
 
 from pydantic import BaseModel
 
+from .backup import backup_file
 from .github import (
     arxiv_id_from_paper,
     fetch_repo,
@@ -25,7 +24,7 @@ from .github import (
     stars_from_repo,
 )
 from .llm import complete
-from .utils import matches_only
+from .utils import matches_only, since_filter
 
 AUTO_ACCEPT_SCORE = 5
 SCORE_MARGIN = 2
@@ -162,17 +161,18 @@ def _popularity_accept(best: dict, ranked: list, paper_year: int | None) -> bool
     """Exact system name plus a decisive star lead over every same-name rival.
 
     Catches real official repos whose bare description defeats description-
-    based corroboration; the star gap substitutes for it. A repo created
-    years before the paper is a name collision (an older tool sharing the
-    system name), not the paper's code.
+    based corroboration; the star gap substitutes for it. A repo whose age
+    cannot be verified, or that was created years before the paper, is a
+    name collision (an older tool sharing the system name) — both close
+    this path.
     """
     if not best.get("_name_subset"):
         return False
     stars = int(best.get("stargazers_count") or 0)
     if stars < POPULARITY_MIN_STARS:
         return False
+    created = str(best.get("created_at") or "")[:4]
     if paper_year is not None:
-        created = str(best.get("created_at") or "")[:4]
         if not created or int(created) < paper_year - 1:
             return False
     rival_stars = max((int(c.get("stargazers_count") or 0) for _, c in ranked[1:]), default=0)
@@ -189,6 +189,15 @@ def _auto_pick(title_tokens: set[str], arxiv_id: str, candidates: list[dict],
         key=lambda pair: -pair[0],
     )
     best_score, best = ranked[0]
+    # A lone candidate whose repo name derives from the title is the official
+    # repo in practice — but only when its age verifies: a creation date that
+    # is present and no earlier than the paper's own window. Unverifiable age
+    # (missing created_at or year) keeps the old corroboration bar, because a
+    # name match alone is exactly how coincidental older tools slip through.
+    if len(candidates) == 1 and best.get("_name_subset") and paper_year is not None:
+        created = str(best.get("created_at") or "")[:4]
+        if created and int(created) >= paper_year - 1:
+            return best
     if best_score < AUTO_ACCEPT_SCORE:
         return best if _popularity_accept(best, ranked, paper_year) else None
     if len(ranked) > 1 and best_score - ranked[1][0] < SCORE_MARGIN:
@@ -244,6 +253,29 @@ def _system_name(title: str) -> str:
     return ""
 
 
+def _system_name_fallback(title: str) -> str:
+    """First distinctive proper-noun token when the title has no ':' head.
+
+    'NetMedGPT - A network medicine...' and 'MGM as a Large-Scale...' carry
+    their system name as the opening token, not before a colon, so the
+    colon-split round never fires for them. A token qualifies when it is
+    ≥3 chars and contains a digit or an interior capital — the shape of
+    system names (NetMedGPT, MGM, DualPG-DTA, h5adify) — and never when it
+    is a plain capitalized word ('Predicting', 'Towards').
+    """
+    title = (title or "").strip()
+    if not title:
+        return ""
+    first = re.split(r"\s+", title, maxsplit=1)[0].strip(",.;:()[]{}\"'")
+    if len(first) < 3 or first.lower() in {"a", "an", "the", "this", "that"}:
+        return ""
+    has_digit = any(c.isdigit() for c in first)
+    has_internal_cap = any(c.isupper() for c in first[1:])
+    if not (has_digit or has_internal_cap):
+        return ""
+    return first[:40]
+
+
 def resolve_repo(paper: dict, token: str | None, model: str = "",
                  api_key: str | None = None, base_url: str | None = None) -> dict | None:
     """Find the official GitHub repository for a paper, or None.
@@ -262,7 +294,8 @@ def resolve_repo(paper: dict, token: str | None, model: str = "",
     if arxiv_id:
         fields = "name,description,readme" if token else "name,description"
         queries.append((f'"{arxiv_id}" in:{fields}', True))
-    name = _system_name(paper.get("title") or "")
+    name = _system_name(paper.get("title") or "") \
+        or _system_name_fallback(paper.get("title") or "")
     if name:
         queries.append((f'"{name}" in:name,description', False))
     if paper.get("title"):
@@ -288,16 +321,30 @@ def _enrich_archive_shape(archive_path: str, *, token: str | None, model: str = 
                           use_llm: bool = True, limit: int | None = None,
                           no_backup: bool = False, status_cb=print,
                           only: list[str] | None = None,
+                          since: str | None = None,
                           stars_style: str = "numeric") -> dict:
     """Fill empty codeUrl fields and refresh githubStars in place (awesome-list mode)."""
     with open(archive_path, "r", encoding="utf-8") as f:
         archive = json.load(f)
 
+    def _in_scope(p: dict) -> bool:
+        return matches_only(p, only or []) and since_filter(p, since)
+
+    # codeUrl -> [titles]: two papers on one official repo is the strongest
+    # preprint-vs-published signal the archive carries (title rewrites defeat
+    # text similarity; repos are not shared between unrelated papers).
+    repo_owners: dict[str, list[str]] = {}
+    for papers in archive.values():
+        for p in papers:
+            owner = owner_repo_from_url(str(p.get("codeUrl") or ""))
+            if owner:
+                repo_owners.setdefault(owner.lower(), []).append(str(p.get("title") or ""))
+
     # Legacy entries store a shields.io badge URL in githubStars; the repo it
     # renders is itself the missing codeUrl.
     for papers in archive.values():
         for p in papers:
-            if not p.get("codeUrl") and (only is None or matches_only(p, only)):
+            if not p.get("codeUrl") and _in_scope(p):
                 badge = _BADGE_URL_RE.search(str(p.get("githubStars") or ""))
                 if badge:
                     p["codeUrl"] = f"https://github.com/{badge.group(1)}"
@@ -306,10 +353,10 @@ def _enrich_archive_shape(archive_path: str, *, token: str | None, model: str = 
     to_refresh = []  # (category, entry)
     for category, papers in archive.items():
         for p in papers:
-            if not p.get("codeUrl") and (only is None or matches_only(p, only)):
+            if not p.get("codeUrl") and _in_scope(p):
                 if p.get("title"):
                     to_resolve.append((category, p))
-            elif owner_repo_from_url(p["codeUrl"]) and (only is None or matches_only(p, only)):
+            elif owner_repo_from_url(p["codeUrl"]) and _in_scope(p):
                 to_refresh.append((category, p))
 
     raw_to_resolve = to_resolve
@@ -325,7 +372,7 @@ def _enrich_archive_shape(archive_path: str, *, token: str | None, model: str = 
         + ("" if llm_ready else " (LLM tiebreak off — only clear matches resolve)")
     )
 
-    resolved = 0
+    resolved = collisions = 0
     for i, (_, p) in enumerate(to_resolve, 1):
         repo = resolve_repo(p, token, model if llm_ready else "",
                             api_key if llm_ready else None, base_url)
@@ -342,6 +389,14 @@ def _enrich_archive_shape(archive_path: str, *, token: str | None, model: str = 
             resolved += 1
             status_cb(f"  [{i}/{len(to_resolve)}] {repo.get('full_name')}  <-  "
                       f"{str(p.get('title'))[:60]}")
+            owner = owner_repo_from_url(p["codeUrl"] or "")
+            rivals = [t for t in repo_owners.get((owner or "").lower(), [])]
+            if rivals:
+                collisions += 1
+                status_cb(f"  [!] Repo collision: '{str(p.get('title'))[:50]}' now shares "
+                          f"{owner} with '{rivals[0][:50]}' — likely a preprint/published "
+                          f"pair; check `updater dedupe` or drop the older entry.")
+            repo_owners.setdefault((owner or "").lower(), []).append(str(p.get("title") or ""))
         elif i % 10 == 0 or i == len(to_resolve):
             status_cb(f"  [{i}/{len(to_resolve)}] unresolved: {str(p.get('title'))[:60]}")
 
@@ -369,10 +424,9 @@ def _enrich_archive_shape(archive_path: str, *, token: str | None, model: str = 
                   + (f"; {missing} unreachable" if missing else ""))
 
     if not no_backup:
-        ts = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
-        backup_path = f"{archive_path}.{ts}.bak"
-        shutil.copy2(archive_path, backup_path)
-        status_cb(f"Created backup: {backup_path}")
+        backup_path = backup_file(archive_path)
+        if backup_path:
+            status_cb(f"Created backup: {backup_path}")
 
     with open(archive_path, "w", encoding="utf-8") as f:
         json.dump(archive, f, indent=2, ensure_ascii=False)
@@ -380,6 +434,7 @@ def _enrich_archive_shape(archive_path: str, *, token: str | None, model: str = 
     return {
         "resolve_candidates": len(to_resolve),
         "resolved": resolved,
+        "repo_collisions": collisions,
         "refresh_candidates": len(to_refresh),
         "refreshed": refreshed,
         "missing_repos": missing,
@@ -453,10 +508,9 @@ def _enrich_agentx_snapshot(archive_path: str, *, token: str | None,
         refreshed += 1
 
     if not no_backup:
-        ts = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
-        backup_path = f"{archive_path}.{ts}.bak"
-        shutil.copy2(archive_path, backup_path)
-        status_cb(f"Created backup: {backup_path}")
+        backup_path = backup_file(archive_path)
+        if backup_path:
+            status_cb(f"Created backup: {backup_path}")
 
     with open(archive_path, "w", encoding="utf-8") as f:
         json.dump(snapshot, f, indent=2, ensure_ascii=False)
@@ -471,6 +525,7 @@ def enrich_archive(archive_path: str, token: str | None = None, *, mode: str = "
                    use_llm: bool = True, limit: int | None = None,
                    no_backup: bool = False, status_cb=print,
                    only: list[str] | None = None,
+                   since: str | None = None,
                    stars_style: str = "numeric") -> dict:
     """Refresh an archive in place — dispatches on `mode`.
 
@@ -487,7 +542,7 @@ def enrich_archive(archive_path: str, token: str | None = None, *, mode: str = "
             archive_path, token=token, model=model, api_key=api_key,
             base_url=base_url, use_llm=use_llm, limit=limit,
             no_backup=no_backup, status_cb=status_cb,
-            only=only, stars_style=stars_style)
+            only=only, since=since, stars_style=stars_style)
     if mode == "agentx":
         return _enrich_agentx_snapshot(
             archive_path, token=token, no_backup=no_backup, status_cb=status_cb)

@@ -751,3 +751,44 @@ def test_enrich_numeric_style_still_rewrites_badge_to_int():
         assert paper["githubStars"] == 99
         assert stats["refreshed"] == 1
 
+
+
+# ── leading system-name fallback + single-candidate acceptance ──
+
+from awescholar.enrich import _system_name_fallback
+
+
+def test_system_name_fallback_grabs_leading_system_token():
+    assert _system_name_fallback(
+        "NetMedGPT - A network medicine foundation model for drug repurposing") == "NetMedGPT"
+    assert _system_name_fallback(
+        "MGM as a Large-Scale Pretrained Foundation Model for Microbiome Analyses") == "MGM"
+    assert _system_name_fallback("h5adify: neuro-symbolic metadata harmonization") == "h5adify"
+
+
+def test_system_name_fallback_rejects_plain_words():
+    assert _system_name_fallback("Predicting the evolutionary landscapes of viruses") == ""
+    assert _system_name_fallback("A foundation model for biology") == ""
+    assert _system_name_fallback("") == ""
+
+
+def test_auto_pick_accepts_single_name_match_with_verified_age():
+    """NetMedGPT case: lone repo, name match, empty description — age verifies."""
+    tokens = _title_tokens("NetMedGPT - A network medicine foundation model")
+    candidate = _repo("faren-f/NetMedGPT", stars=4)
+    candidate["created_at"] = "2026-01-10T00:00:00Z"
+    assert _auto_pick(tokens, "", [candidate], paper_year=2026) is candidate
+
+
+def test_auto_pick_single_name_match_requires_verifiable_age():
+    """Name match alone is not corroboration: no created_at, no acceptance."""
+    tokens = _title_tokens("BioAgent: an agent for biology")
+    candidate = _repo("x/BioAgent", stars=10)
+    assert _auto_pick(tokens, "", [candidate], paper_year=2026) is None
+
+
+def test_auto_pick_single_name_match_rejects_repo_older_than_paper():
+    tokens = _title_tokens("Grape: genetic perturbation learning")
+    candidate = _repo("ruby-grape/grape", stars=10)
+    candidate["created_at"] = "2010-08-02T00:00:00Z"
+    assert _auto_pick(tokens, "", [candidate], paper_year=2025) is None

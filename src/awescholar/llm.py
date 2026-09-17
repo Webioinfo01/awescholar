@@ -6,6 +6,8 @@ import re
 import litellm
 from pydantic import BaseModel
 
+from .utils import retry_with_backoff
+
 
 def _extract_json(text: str) -> str:
     """Extract JSON from LLM response, handling markdown fences and preamble."""
@@ -74,7 +76,7 @@ def complete(
     if response_format:
         kwargs["response_format"] = {"type": "json_object"}
 
-    response = litellm.completion(**kwargs)
+    response = retry_with_backoff(litellm.completion, **kwargs)
     content = response.choices[0].message.content
 
     if response_format:

@@ -36,6 +36,11 @@ _TITLE_FIELDS = ["paperId", "title", "venue", "year", "publicationDate",
                  "authors", "externalIds", "url", "journal", "citationCount", "abstract"]
 
 
+def _load_archive_json(archive_path: str) -> dict:
+    with open(archive_path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
 def find_preprints(archive: dict, only: list[str] | None = None) -> list[dict]:
     """Every archive entry that looks like a preprint, as review references.
 
@@ -256,6 +261,62 @@ def apply_review(review_path: str, archive_path: str,
         json.dump(archive, f, indent=2, ensure_ascii=False)
     os.remove(review_path)
     return applied
+
+
+def queue_pair(archive_path: str, preprint_doi: str, published_doi: str,
+               api_key: str | None = None, review_path: str | None = None,
+               status_cb=print) -> list[dict]:
+    """Queue a manual preprint→published upgrade for a retitled twin.
+
+    Retitled twins defeat every automatic channel — no shared DOI link, no
+    title similarity. ``--pair`` is the human override: point it at both
+    DOIs, it locates the preprint in the archive, fetches the published
+    record from Semantic Scholar, and writes the same review item shape the
+    scan produces, so ``--review <file> --apply`` upgrades it unchanged.
+    """
+    from .record import _get_client, _paper_to_record
+
+    archive = _load_archive_json(archive_path)
+    needle = preprint_doi.strip().lower()
+    location = None
+    for category, papers in archive.items():
+        for i, p in enumerate(papers):
+            if str(p.get("doi") or "").casefold() == needle:
+                location = (category, i, p)
+                break
+        if location:
+            break
+    if location is None:
+        raise ValueError(f"preprint DOI {preprint_doi!r} not found in {archive_path}")
+
+    sch = _get_client(api_key)
+    paper = sch.get_paper(
+        f"DOI:{published_doi}",
+        fields=["paperId", "title", "venue", "year", "publicationDate",
+                "authors", "externalIds", "url", "journal", "citationCount"],
+    )
+    record = _paper_to_record(paper)
+    if not record or not record.get("title"):
+        raise ValueError(f"published DOI {published_doi!r} not found on Semantic Scholar")
+    record.pop("abstract", None)
+
+    category, index, existing = location
+    review = [{
+        "category": category,
+        "index": index,
+        "existing": existing,
+        "published": record,
+        "evidence": {"match": "manual-pair", "preprint_doi": preprint_doi,
+                     "published_doi": published_doi},
+    }]
+    path = review_path or os.path.join(
+        os.path.dirname(archive_path) or ".", DEFAULT_REVIEW_FILENAME)
+    write_review(review, path)
+    status_cb(f"Queued manual pair: {existing.get('title')}\n"
+              f"  -> {record.get('title')} ({record.get('venue') or published_doi})")
+    status_cb(f"Apply : awescholar updater publish-scan --archive {archive_path} "
+              f"--review {path} --apply")
+    return review
 
 
 def publish_scan(archive_path: str, api_key: str | None = None, *,
