@@ -29,10 +29,16 @@ src/awescholar/
   db.py             # SQLAlchemy ORM (Paper model) and session factory
   utils.py          # Re-export facade (imports from archive, readme, rss)
   archive.py        # Archive merge operations (new2old, old2new)
+  backup.py         # Timestamped archive backups; skips git-clean files
+  months.py         # --month / --period date and output-dir derivation
   readme.py         # README generation and update
   rss.py            # RSS feed generation
+  digest.py         # Monthly digest rendering from the archive
   github.py         # GitHub REST access (repo search, metrics, URL parsing)
   enrich.py         # Paper -> official GitHub repo resolution and stars refresh
+  publish_scan.py   # Preprint -> published-version scan and in-place upgrade
+  reader.py         # Offline query/related/recommend/stats over the archive
+  scaffold.py       # awescholar init repository scaffolding
   agentx_export.py  # Export repo-backed papers as AgentX candidate agents
 tests/
   test_cli.py       # CLI argument parsing and config tests

@@ -21,12 +21,13 @@ New `updater publish-scan` — scan archived preprints for published versions an
 - Preprint detection (`is_preprint`) now covers bioRxiv/medRxiv (old `10.1101` and new `10.64898` prefixes), Research Square, Preprints.org, ChemRxiv, Authorea and SSRN in addition to arXiv — a bioRxiv DOI never contains "arxiv", so the old substring check silently missed every non-arXiv preprint server
 - As a direct consequence, `updater dedupe --keep published` now correctly prefers a journal version over a bioRxiv/medRxiv preprint when resolving held-back pairs (previously the tie kept the preprint and dropped the published metadata)
 
-Monthly-report workflow — `crawler run --month` replaces copy-a-config-per-month, `updater digest` summarizes a month straight from the archive, report filenames no longer embed the model name, and the filter gates on scope before venue prestige.
+Monthly-report workflow — `crawler run --month` (and half-month `--period`) replaces copy-a-config-per-month, `render digest` summarizes a month straight from the archive, report filenames no longer embed the model name, and the filter gates on scope before venue prestige.
 
 ### Highlights
 
-- New `crawler run --month 2026-05` (also on `crawler search`; mutually exclusive with `--date`) derives the search dates (`2026-05-01:2026-05-31`, leap years included), the output directory (`month_reports/2605`), and the report name from one argument, overriding `search.publication_date` and `output.db_path` — one tracked base config serves every month, no more hand-copied per-month config files
-- New `updater digest --archive docs/data.json --month 2026-05` summarizes the papers a curated archive holds for one month (matched by the `year` field, `2026.05` and unpadded `2026.5` both match): an LLM narrative when a model is configured, structured tables with `--no-llm` or when no key resolves; output defaults to `month_reports/YYMM/digest.md`, and an empty month fails with an actionable error instead of an empty report
+- New `crawler run --month 2026-05` (also on `crawler search`; mutually exclusive with `--date` and `--period`) derives the search dates (`2026-05-01:2026-05-31`, leap years included), the output directory (`month_reports/2605`), and the report name from one argument, overriding `search.publication_date` and `output.db_path` — one tracked base config serves every month, no more hand-copied per-month config files
+- New `crawler run --period 2026-06-1` is the half-month face (`P=1` is 01–15, `P=2` is 16–end; output `month_reports/YYMM_P`)
+- New `render digest --archive docs/data.json --month 2026-05` (formerly `updater digest` before the CLI regroup) summarizes the papers a curated archive holds for one month (matched by the `year` field, `2026.05` and unpadded `2026.5` both match): an LLM narrative when a model is configured, structured tables with `--no-llm` or when no key resolves; output defaults to `month_reports/YYMM/digest.md`, and an empty month fails with an actionable error instead of an empty report
 - The default report filename is `{db_path}/report.md` instead of `research_report_{model}.md` — the model name moves into a provenance comment at the top of every report (`<!-- awescholar <version> · model: ... · scope: ... -->`), so per-month report paths are stable across model changes
 - The filter step now gates on scope before quality: papers whose subject falls outside the research interests (sharing a technique like an LLM but applied in an unrelated domain) are excluded regardless of venue prestige, the annotator-assigned `domain` is sent to the filterer as an off-scope signal, and `filter.limit` is an upper bound rather than a quota — fewer selections is a normal outcome, ending the traffic-prediction-in-a-biology-report failure mode
 
@@ -36,10 +37,20 @@ Single-paper curation pass — DOI-first paper links, `--code-url` and `--annota
 
 - `updater search` writes `paperUrl` as the DOI link (`https://doi.org/…`) whenever the paper has a DOI — the Semantic Scholar page URL is the last-resort fallback, never the first choice
 - New `updater search --code-url owner/repo --annotate`: a repo you already know goes straight into `codeUrl` (skipping GitHub discovery; with `archive.stars_style: "badge"` the shields.io URL lands in `githubStars` too), and the configured annotator LLM fills the one-line `domain` of just the added papers — the same annotator the crawler pipeline uses, one batch call, LLM failure never loses the added records
-- New `--only "DOI or title substring"` (repeatable) scopes `updater enrich`, `updater backfill`, and `updater citations` to matching entries — topping up one entry no longer rewrites the whole archive (backfill's trusted-name map still spans the whole archive)
+- New `--only "DOI or title substring"` (repeatable) scopes `updater enrich`, `updater backfill`, and citation fills to matching entries — topping up one entry no longer rewrites the whole archive (backfill's trusted-name map still spans the whole archive)
 - New config `archive.stars_style`: `numeric` (default) keeps refreshing bare ints and migrating legacy badge values; `badge` makes enrich write shields.io URLs and never rewrite an existing badge to a number — the Awesome-AI-Meets-Biology star convention is now config, not documentation; `--stars-style` overrides per run
-- New `updater export-agentx --emit commands`: writes an executable `pnpm agent:add owner/repo --category … --name … --paper …` script instead of candidate JSON — the last mile into an agentx repo, where the target's own `agent:add` still validates categories and the tag registry (tags are deliberately not emitted)
-- `updater search --archive` and `updater update --direction new2old` print the natural next step (`updater counts` / `updater rss`) after papers land, so README counts and the RSS feed never silently go stale
+- New `render agentx --emit commands` (formerly `updater export-agentx --emit commands`): writes an executable `pnpm agent:add owner/repo --category … --name … --paper …` script instead of candidate JSON — the last mile into an agentx repo, where the target's own `agent:add` still validates categories and the tag registry (tags are deliberately not emitted)
+- `updater search --archive` and `updater update --direction new2old` print the natural next step (`render counts` / `render rss`) after papers land, so README counts and the RSS feed never silently go stale
+
+Robustness and ops polish — quieter git-aware backups, stronger retitled-duplicate detection, half-month periods, manual publish-scan pairs, and network retries.
+
+### Highlights
+
+- Archive backups skip timestamped copies when the target file is git-clean (`awescholar.backup`)
+- Dedupe holds back author-roster-overlap and `codeUrl`-collision pairs for review, not only title similarity
+- New records stamp `addedAt`; `updater enrich --since YYYY-MM-DD` scopes to entries added on/after that date (legacy rows without `addedAt` are always included)
+- `updater publish-scan --pair PREPRINT PUBLISHED` queues a manual preprint→published upgrade for retitled twins no database links
+- `retry_with_backoff` wraps network, LLM, and Semantic Scholar calls so transient failures do not abort a long enrich/publish-scan run
 
 
 ## v0.2.2

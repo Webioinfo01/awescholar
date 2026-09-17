@@ -17,24 +17,26 @@ Match the user's intent to a task domain, then follow the workflow below.
 | "Search for papers about X", "find recent papers" | Crawler Pipeline | `awescholar --config cfg.json crawler search "query"` |
 | "Run the full discovery pipeline" | Crawler Pipeline | `awescholar --config cfg.json crawler run "query"` |
 | "Monthly report for 2026-05", "跑上个月的月报" | Crawler Month | `awescholar --config cfg.json crawler run --month 2026-05` |
-| "Update the project", "full update", "merge and update" | Updater Full | `updater update` → `updater counts` (website-first) or `updater readme` (tables) → `updater rss` |
+| "Half-month report for 2026-06-1", "半月刊" | Crawler Period | `awescholar --config cfg.json crawler run --period 2026-06-1` |
+| "Update the project", "full update", "merge and update" | Updater Full | `updater update` → `render counts` (website-first) or `render readme` (tables) → `render rss` |
 | "Merge new results into project data", "update the archive" | Updater Merge | `awescholar updater update --direction new2old --input X --archive Y` |
-| "Digest the archive for a month", "当月入库论文摘要" | Updater Digest | `awescholar updater digest --archive docs/data.json --month 2026-05` |
-| "Update the README table" | Updater README | `awescholar updater readme --archive data.json` |
-| "Refresh README paper counts" | Updater Counts | `awescholar updater counts --archive docs/data.json` |
-| "Generate RSS feed" | Updater RSS | `awescholar updater rss --archive data.json` |
+| "Digest the archive for a month", "当月入库论文摘要" | Render Digest | `awescholar render digest --archive docs/data.json --month 2026-05` |
+| "Update the README table" | Render README | `awescholar render readme --archive data.json` |
+| "Refresh README paper counts" | Render Counts | `awescholar render counts --archive docs/data.json` |
+| "Generate RSS feed" | Render RSS | `awescholar render rss --archive data.json` |
 | "Add a paper by title/DOI search" | Updater Search | `awescholar updater search --json-file papers.json` |
 | "Manually add a paper record" | Updater Add | `awescholar updater add --archive data.json` |
 | "Find the GitHub repo for papers", "add code links and stars" | Updater Enrich | `awescholar updater enrich --archive docs/data.json` |
 | "Refresh AgentX registry stats", "update the agentx snapshot" | Updater Enrich-AgentX | `awescholar updater enrich --archive agents-snapshot.json --agentx` |
-| "Backfill citation counts", "fill citations" | Updater Citations | `awescholar updater citations --archive docs/data.json` |
+| "Backfill citation counts", "fill citations" | Updater Backfill | `awescholar updater backfill --archive docs/data.json --fields citations` |
 | "Fill missing affiliations/teams", "补机构信息" | Updater Backfill | `awescholar updater backfill --archive docs/data.json` |
-| "Export papers as agentx agents", "feed the agent registry" | Updater Export-AgentX | `awescholar updater export-agentx --archive docs/data.json -o candidates.json` |
+| "Preprint upgraded to journal?", "升级正式发表版" | Updater Publish-Scan | `awescholar updater publish-scan --archive docs/data.json` |
+| "Export papers as agentx agents", "feed the agent registry" | Render AgentX | `awescholar render agentx --archive docs/data.json -o candidates.json` |
 | "What's in my archive about X", "search my curated papers" | Reader Query | `awescholar reader query --archive docs/data.json "X" --json` |
 | "Papers related to this one", pasted abstract/DOI/title | Reader Related | `awescholar reader related --archive docs/data.json --doi X --json` |
 | "Must-read papers for my field", "reading list", "入门必读" | Reader Recommend | `awescholar reader recommend --archive docs/data.json --field "X" --top 10` |
 | "Archive stats", "how many papers do I have" | Reader Stats | `awescholar reader stats --archive docs/data.json` |
-| "Resolve held-back duplicates", "处理重复论文" | Updater Dedupe | `awescholar updater dedupe --review output/dedupe_review.json --archive docs/data.json --keep newer` |
+| "Resolve held-back duplicates", "处理重复论文" | Updater Dedupe | `awescholar updater dedupe --review output/dedupe_review.json --archive docs/data.json --keep published` |
 
 ## First-Time Setup
 
@@ -48,10 +50,11 @@ Match the user's intent to a task domain, then follow the workflow below.
 
 1. Always use `--config` when running crawler commands — it carries model, API key, and search settings. Without `--config`, `~/.config/awescholar/config.json` supplies global defaults (model profiles, API keys), so key-only commands like `updater enrich` work without a project config.
 2. Crawler steps are sequential: search → annotate → filter → report. Each reads from the previous step's output by default, but accepts `--input` to override.
-3. Updater commands operate on the **project data JSON** (long-lived curated file, e.g. `docs/data.json`). Do not confuse with pipeline intermediates (`updater.json`, `updater_filter.json`).
+3. `updater` commands operate on the **project data JSON** (long-lived curated file, e.g. `docs/data.json`). `render` commands only read that archive and write derived artifacts (README, RSS, digest, agentx candidates) — they never modify it. Do not confuse either with pipeline intermediates (`updater.json`, `updater_filter.json`).
 4. For `updater search`: use `--json-file` to save results for review first, then `updater update --direction new2old` to merge. Use `--archive` only when you want to write directly.
-5. For `updater readme`: default behavior creates a timestamped `.bak` backup. Use `--no-backup` to skip.
+5. For `render readme`: default behavior creates a timestamped `.bak` backup. Use `--no-backup` to skip. Git-clean files are also skipped by the archive backup helper.
 6. `reader` commands are read-only: they never modify the archive and need no `--config` (only `recommend --llm` does). Prefer `--json` when consuming programmatically, and answer the user following Response Format.
+7. Breaking rename: `updater readme|counts|rss|digest|export-agentx|citations` no longer exist. Use `render readme|counts|rss|digest|agentx` and `updater backfill --fields citations`.
 
 ## Workflows
 
@@ -74,7 +77,7 @@ awescholar init --no-serve --port 8123 # skip the docs/ preview (default port 80
 awescholar init --force                # proceed even if the target directory is not empty
 ```
 
-After init: edit `config.json` (model keys, search query), then add papers with `updater add` / `updater search`. For website-first repos (no embedded tables), refresh README counts with `updater counts` after merging papers.
+After init: edit `config.json` (model keys, search query), then add papers with `updater add` / `updater search`. For website-first repos (no embedded tables), refresh README counts with `render counts` after merging papers.
 
 ### Crawler Pipeline
 
@@ -86,6 +89,9 @@ awescholar --config cfg.json crawler run "AI agent" --limit 50 --date 2025-01-01
 
 # Monthly run: one argument derives dates, output dir, and report name
 awescholar --config cfg.json crawler run --month 2026-05   # -> month_reports/2605/report.md
+
+# Half-month run: P=1 is 01–15, P=2 is 16–end
+awescholar --config cfg.json crawler run --period 2026-06-1   # -> month_reports/2606_1/report.md
 
 # Step-by-step
 awescholar --config cfg.json crawler search "AI agent" --limit 100 --date 2025-01-01:2025-05-30
@@ -102,16 +108,16 @@ Pipeline config flow control:
 - `use_filtered_json: true` — skip to report only
 - `merge_new_to_old: true` + `data_json_path` — auto-merge filtered results into project data JSON after filter step
 
-With `--month`, the config's `search.publication_date` and `output.db_path` are overridden by the derived month values — keep ONE tracked base config in the repo and pass the month per run. The default report filename is `{db_path}/report.md` (the model name lives in a provenance comment inside the report, not the filename). The filter gates on scope before quality: off-scope papers are excluded regardless of venue, and fewer papers than `filter.limit` is a normal outcome — do not re-run to force a count.
+With `--month` / `--period`, the config's `search.publication_date` and `output.db_path` are overridden by the derived values — keep ONE tracked base config in the repo and pass the month/period per run. `--date`, `--month`, and `--period` are mutually exclusive. The default report filename is `{db_path}/report.md` (the model name lives in a provenance comment inside the report, not the filename). The filter gates on scope before quality: off-scope papers are excluded regardless of venue, and fewer papers than `filter.limit` is a normal outcome — do not re-run to force a count.
 
-### Updater Digest
+### Render Digest
 
 Use when producing a monthly summary of what the curated archive actually holds, instead of running a fresh discovery pipeline.
 
 ```bash
 # LLM narrative when a model is configured; tables-only with --no-llm
-awescholar updater digest --archive docs/data.json --month 2026-05            # -> month_reports/2605/digest.md
-awescholar updater digest --archive docs/data.json --month 2026-05 --no-llm   # offline, no model key needed
+awescholar render digest --archive docs/data.json --month 2026-05            # -> month_reports/2605/digest.md
+awescholar render digest --archive docs/data.json --month 2026-05 --no-llm   # offline, no model key needed
 ```
 
 Selection is by each record's `year` field (`2026.05`, unpadded `2026.5` also matches). An empty month fails with an actionable error — check `--month` or the records' `year` fields before retrying.
@@ -128,7 +134,7 @@ awescholar updater update --direction new2old --input output/updater_filter.json
 awescholar updater update --direction old2new --input output/updater_filter.json --archive docs/data.json
 ```
 
-Near-duplicates (title similarity ≥ 0.90, or ≥ 0.80 with a shared author) are held back instead of merged — see Updater Dedupe below.
+Near-duplicates (title similarity ≥ 0.90, or ≥ 0.80 with a shared author) are held back instead of merged — see Updater Dedupe below. Heavily retitled pairs whose author roster almost fully overlaps are also held back.
 
 Decision order:
 1. Review `updater_filter.json` before merging — confirm content is appropriate.
@@ -137,24 +143,24 @@ Decision order:
 
 ### Updater Full Update
 
-Use when updating the entire project after new data is ready. Chains all three updater steps.
+Use when updating the entire project after new data is ready. Chains merge + render steps.
 
 ```bash
 # 1. Merge new filtered results into project data
 awescholar updater update --direction new2old --input output/updater_filter.json --archive docs/data.json
 
 # 2. Regenerate README table
-awescholar updater readme --archive docs/data.json --readme readme.md --no-backup
+awescholar render readme --archive docs/data.json --readme readme.md --no-backup
 
 # 3. Regenerate RSS feed
-awescholar updater rss --archive docs/data.json -o docs/rss.xml
+awescholar render rss --archive docs/data.json -o docs/rss.xml
 ```
 
 Decision order:
 1. Review `updater_filter.json` before merging — confirm content is appropriate.
 2. Run merge first (`updater update`). If merge fails, stop and fix before continuing.
-3. Run readme (`updater readme`). If readme fails, the data is already merged — check for marker issues.
-4. Run RSS last (`updater rss`). Skipping RSS means subscribers won't see new papers.
+3. Run readme/counts (`render readme` or `render counts`). If that fails, the data is already merged — check for marker issues.
+4. Run RSS last (`render rss`). Skipping RSS means subscribers won't see new papers.
 
 ### Updater Search & Add
 
@@ -169,35 +175,32 @@ awescholar updater search --json-file papers.json --by doi
 awescholar updater search --archive docs/data.json --by title
 awescholar updater search --archive docs/data.json --category "AI Agents"         # into a specific category
 awescholar updater search --archive docs/data.json --by doi 10.1038/x 10.1038/y  # DOIs as arguments, non-interactive
+awescholar updater search --archive docs/data.json --by doi 10.1038/x \
+    --code-url owner/repo --annotate   # known repo into codeUrl + annotator LLM fills domain
 
 # Manually add a record (interactive prompt)
 awescholar updater add --archive docs/data.json
 ```
+
+`paperUrl` is written as the DOI link (`https://doi.org/…`) whenever the paper has a DOI. `--code-url owner/repo` (shorthand or full URL) skips repo discovery for a repo you already know — with `archive.stars_style: "badge"` in config it also writes the shields.io badge into `githubStars`. `--annotate` runs the crawler's annotator LLM once over just the added papers to fill the one-line `domain`. After papers land, the command prints the natural next step (`render counts` / `render rss`).
 
 Workflow for reviewed search:
 1. `updater search --json-file papers.json` — search and save for review
 2. Review and edit `papers.json` as needed
 3. `updater update --direction new2old --input papers.json --archive docs/data.json` — merge when ready
 
-### Updater Citations
-
-Use when filling empty `citations` counts from Semantic Scholar (powers the website citation badge under Paper).
-
-```bash
-awescholar updater citations --archive docs/data.json
-awescholar updater citations --archive docs/data.json --no-backup
-```
-
-Only empty counts are filled; existing values are preserved. Entries need a DOI.
-
 ### Updater Backfill
 
-Use when records lack `affiliation`/`team` fields. Consults three sources cheapest-per-coverage first: Semantic Scholar author batches, Crossref per-DOI metadata, OpenAlex curated institutions. Only empty fields are filled, entries never move between categories, and the affiliation always comes from the same author as the team.
+Use when records lack `affiliation`/`team` and/or empty `citations` counts. Consults three sources cheapest-per-coverage first: Semantic Scholar author batches, Crossref per-DOI metadata, OpenAlex curated institutions. Only empty fields are filled, entries never move between categories, and the affiliation always comes from the same author as the team. Citations power the website badge under Paper and come from Semantic Scholar `citationCount` (DOI required; existing values preserved).
 
 ```bash
 awescholar updater backfill --archive docs/data.json
 awescholar updater backfill --archive docs/data.json --no-backup
+awescholar updater backfill --archive docs/data.json --only XunZi  # DOI exact or title substring, repeatable
+awescholar updater backfill --archive docs/data.json --fields citations  # only citation counts
 ```
+
+There is no separate `updater citations` command — use `backfill --fields citations`.
 
 ### Reader (Query · Related · Recommend · Stats)
 
@@ -229,40 +232,40 @@ Paper-to-precedents flow (user pastes an abstract):
 2. `awescholar reader related --archive docs/data.json --input <temp> --top 5 --json`.
 3. Answer following Response Format; offer `updater search` for papers worth adding.
 
-### Updater README
+### Render README
 
 Use when regenerating the README table from the project data JSON.
 
 ```bash
 # Generate with backup (default)
-awescholar updater readme --archive docs/data.json --readme readme.md
+awescholar render readme --archive docs/data.json --readme readme.md
 
 # Generate without backup
-awescholar updater readme --archive docs/data.json --readme readme.md --no-backup
+awescholar render readme --archive docs/data.json --readme readme.md --no-backup
 
 # Custom title and description
-awescholar updater readme --archive docs/data.json --readme readme.md --title "My Project" --description "A curated list of papers"
+awescholar render readme --archive docs/data.json --readme readme.md --title "My Project" --description "A curated list of papers"
 ```
 
 Default backup creates `{readme}.{YYYYMMDD_HHMMSS}.bak` before overwriting.
 
-### Updater Counts
+### Render Counts
 
 Use when the repo is website-first (papers live on the website, README shows links and counts only). Refresh after every merge.
 
 ```bash
-awescholar updater counts --archive docs/data.json
+awescholar render counts --archive docs/data.json
 # updates readme.md / README.zh-CN.md / README.md (whichever exist in cwd);
 # --readme <path> is repeatable to target specific files
 ```
 
-### Updater RSS
+### Render RSS
 
 Use when generating an RSS feed from the project data JSON.
 
 ```bash
-awescholar updater rss --archive docs/data.json -o docs/rss.xml
-awescholar updater rss --archive docs/data.json -o docs/rss.xml --title "Paper Updates"
+awescholar render rss --archive docs/data.json -o docs/rss.xml
+awescholar render rss --archive docs/data.json -o docs/rss.xml --title "Paper Updates"
 ```
 
 ### Updater Dedupe
@@ -280,14 +283,38 @@ Decision order:
 3. `--keep both` — rare: keep two entries when they are genuinely distinct papers.
 4. Use `updater update --no-dedupe` only when the user explicitly wants everything appended blindly.
 
+### Updater Publish-Scan
+
+Use when archived preprints may already have a journal version of record. Proactive mirror of merge-time dedupe: scan the archive instead of waiting for the published paper to collide later.
+
+```bash
+# Dry run: write publish_review.json next to the archive
+awescholar updater publish-scan --archive docs/data.json
+
+# Scan + upgrade in one shot
+awescholar updater publish-scan --archive docs/data.json --apply
+
+# Apply a reviewed queue without rescanning
+awescholar updater publish-scan --archive docs/data.json --review publish_review.json --apply
+
+# Scope, manual pair, DOI-only verification
+awescholar updater publish-scan --archive docs/data.json --only XunZi --limit 5
+awescholar updater publish-scan --archive docs/data.json --pair PREPRINT_DOI PUBLISHED_DOI --apply
+awescholar updater publish-scan --archive docs/data.json --no-title-search
+```
+
+Covers bioRxiv/medRxiv (old and new prefixes), Research Square, Preprints.org, ChemRxiv, Authorea, SSRN, and arXiv. Verification channels: S2 by DOI → fuzzy S2 title → Crossref `query.title`. Title matches need dedupe-grade similarity + non-empty venue. `--apply` switches venue/DOI/paperUrl/year/authors/citations and keeps category/codeUrl/githubStars/domain/affiliation.
+
 ### Updater Enrich
 
-Use when papers lack GitHub links or star counts are stale. Fills empty `codeUrl` (GitHub search rounds: arXiv ID, then leading system name, then full title — a round whose candidates all fail falls through to the next; corroborated heuristic match auto-accept, ambiguous races judged by the configured LLM) and refreshes `githubStars` as a numeric count for every linked repo. Only empty `codeUrl` fields are filled; legacy badge-URL stars migrate automatically. If the project convention is badge URLs (Awesome-AI-Meets-Biology), write `https://img.shields.io/github/stars/owner/repo` into `githubStars` for GitHub `codeUrl` entries and leave it empty for non-GitHub code links.
+Use when papers lack GitHub links or star counts are stale. Fills empty `codeUrl` (GitHub search rounds: arXiv ID, then leading system name, then full title — a round whose candidates all fail falls through to the next; corroborated heuristic match auto-accept, ambiguous races judged by the configured LLM) and refreshes `githubStars` for every linked repo. Only empty `codeUrl` fields are filled. The star shape follows the config convention `archive.stars_style`: `numeric` (default) refreshes bare ints and migrates legacy badge-URL values; `badge` (Awesome-AI-Meets-Biology) writes `https://img.shields.io/github/stars/owner/repo` and never rewrites an existing badge to a number. `--stars-style` overrides per run.
 
 ```bash
 awescholar updater enrich --archive docs/data.json              # resolve + refresh (LLM tiebreak on when configured)
 awescholar updater enrich --archive docs/data.json --limit 20   # cap resolution per run
 awescholar updater enrich --archive docs/data.json --no-llm     # heuristics only
+awescholar updater enrich --archive docs/data.json --only XunZi # scope to matching entries (DOI or title substring, repeatable)
+awescholar updater enrich --archive docs/data.json --since 2026-09-01  # only entries added on/after this date (needs addedAt)
 
 # AgentX mode: refresh an agentx registry snapshot in place (metrics only)
 awescholar updater enrich --archive agents-snapshot.json --agentx
@@ -297,19 +324,23 @@ awescholar updater enrich --archive agents-snapshot.json --agentx
 
 Needs `GITHUB_TOKEN` (config `github.token` > env `GITHUB_TOKEN` > `--github-token`); anonymous limits are 10 searches/min and 60 repo reads/hour. After enriching, regenerate the README so the numeric stars render as live badges.
 
-### Updater Export-AgentX
+### Render AgentX
 
 Use when feeding an agentx-style registry (repo-first agent directory). Exports every archive paper with a github.com `codeUrl` as an agentx snapshot-shaped candidate agent (slug/name/repo/paperMeta/category + live metrics when a token is available). The output is a review queue for agentx intake, not a drop-in snapshot.
 
 ```bash
-awescholar updater export-agentx --archive docs/data.json -o candidates.json
+awescholar render agentx --archive docs/data.json -o candidates.json
 # map archive categories to agentx slugs; unmapped papers land in --default-category
-awescholar updater export-agentx --archive docs/data.json -o candidates.json --category-map map.json --default-category platforms
+awescholar render agentx --archive docs/data.json -o candidates.json --category-map map.json --default-category platforms
 # scope to given archive categories; skip repos already registered in a snapshot
-awescholar updater export-agentx --archive docs/data.json -o candidates.json --categories "AI Agents,Reviews" --exclude-snapshot agents-snapshot.json
+awescholar render agentx --archive docs/data.json -o candidates.json --categories "AI Agents,Reviews" --exclude-snapshot agents-snapshot.json
+# emit an executable pnpm agent:add intake script instead of candidate JSON (the last mile into an agentx repo)
+awescholar render agentx --archive docs/data.json -o intake.sh --emit commands
+# classify each candidate's agentx category with the configured model (needs --exclude-snapshot)
+awescholar render agentx --archive docs/data.json -o intake.sh --emit commands --exclude-snapshot agents-snapshot.json --llm-category
 ```
 
-No category list is hardcoded: when `--exclude-snapshot` points at an agentx snapshot, the categories actually present in that file are the source of truth — mapped or default slugs missing from it draw a warning (no snapshot means no validation). `--source`/`--source-url` record provenance on every exported agent. Run `updater enrich` first so papers carry their repos and numeric stars.
+No category list is hardcoded: when `--exclude-snapshot` points at an agentx snapshot, the categories actually present in that file are the source of truth — mapped or default slugs missing from it draw a warning (no snapshot means no validation). `--source`/`--source-url` record provenance on every exported agent. Run `updater enrich` first so papers carry their repos and stars. `--emit commands` writes one `pnpm agent:add owner/repo --category … --name … --paper …` line per candidate — tags are deliberately not emitted (the tag registry belongs to the target repo, whose agent:add validates at run time). `--llm-category` prefers the paper's system name for display and asks the annotator model for a category slug that exists in the target snapshot.
 
 ## Response Format (reader intents)
 
@@ -352,6 +383,7 @@ When answering a user from reader results, keep the structure stable across sess
         "merge_new_to_old": false,
         "data_json_path": null
     },
+    "archive": { "stars_style": "numeric" },
     "categories": ["Foundation Models", "Drug Discovery", "Single Cell Analysis"]
 }
 ```
@@ -361,7 +393,8 @@ Key fields:
 - **model.base_url**: Required for non-default endpoints. Must be OpenAI-compatible.
 - **model_profiles**: Reusable profile map. Referenced by `model.profile` or `agent_models.*.profile`.
 - **agent_models**: Per-agent overrides for annotator/filterer/reporter. `null` = use global model.
-- **github.token**: GitHub token for `updater enrich` / `export-agentx` live metrics (else env `GITHUB_TOKEN` / `--github-token`).
+- **github.token**: GitHub token for `updater enrich` / `render agentx` live metrics (else env `GITHUB_TOKEN` / `--github-token`).
+- **archive.stars_style**: `numeric` (default — bare ints, refreshed by enrich) or `badge` (shields.io URLs; enrich writes badges and never rewrites one to a number). CLI `--stars-style` overrides per run.
 - **pipeline.data_json_path**: Long-lived curated project data JSON. When `merge_new_to_old` is true, filtered results auto-merge here after pipeline completes.
 - **pipeline.existing_json_path**: Intermediate annotate output (`updater.json`). Different from `data_json_path`.
 - **pipeline.skip_search / use_updater_json / use_filtered_json**: Flow control — see Crawler Pipeline section.
