@@ -450,7 +450,7 @@ def cmd_export_agentx(args: argparse.Namespace, config: dict) -> int | None:
         default_category=args.default_category, source=args.source,
         source_url=args.source_url,
         categories=args.categories.split(",") if args.categories else None,
-        exclude_snapshot=args.exclude_snapshot, emit=args.emit,
+        exclude_snapshot=args.exclude_snapshot,
         llm_model=llm_model, llm_api_key=llm_api_key, llm_base_url=llm_base_url,
         status_cb=status,
     )
@@ -782,7 +782,8 @@ def main() -> int:
     p.add_argument("--no-llm", action="store_true",
                    help="Skip the LLM narrative; emit tables only (no model key needed)")
 
-    p = render_sub.add_parser("agentx", help="Export papers with GitHub repos as AgentX candidate agents")
+    p = render_sub.add_parser("agentx", help="Export papers with GitHub repos as AgentX candidate agents "
+                                              "(snapshot-shaped JSON for `agentx add --from-json`)")
     p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")
     p.add_argument("-o", "--output", type=str, required=True, help="Output candidate JSON path")
     p.add_argument("--category-map", type=str,
@@ -796,8 +797,6 @@ def main() -> int:
                    help="Comma-separated archive categories to export (default: all)")
     p.add_argument("--exclude-snapshot", type=str,
                    help="agentx agents-snapshot.json whose repos are skipped as already registered")
-    p.add_argument("--emit", choices=["json", "commands"], default="json",
-                   help="Output shape: candidate JSON (default) or a shell script of pnpm agent:add intake lines")
     p.add_argument("--llm-category", action="store_true",
                    help="classify each candidate's agentx category with the configured model "
                         "(needs --exclude-snapshot for the category list)")

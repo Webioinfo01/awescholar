@@ -19,6 +19,13 @@
 
 ## Unreleased
 
+`render agentx` exports data only — the `--emit commands` shell-script mode is gone. Emitting another CLI's invocation shape (verb, flags, escaping, working directory) from inside awescholar was the wrong direction; a hub now ingests the candidate JSON with `agentx add --from-json <file>` (agentx-cli), which re-validates and re-fetches live metrics on its side.
+
+### Highlights
+
+- `render agentx` always writes the snapshot-shaped candidate JSON; the `--emit` flag is removed
+- Breaking: replace `--emit commands` scripts with `agentx add --from-json candidates.json` run inside the AgentX hub checkout
+
 CLI regrouped by first principles — every command that only derives artifacts from the project data JSON moves from `updater` to a new `render` group, and citation backfill folds into `updater backfill`; `updater` is now purely the archive-data lifecycle (12 subcommands → 6).
 
 ### Highlights
