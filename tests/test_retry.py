@@ -1,5 +1,6 @@
 """Tests for retry_with_backoff and since_filter — transient-failure and provenance helpers."""
 
+import httpx
 import pytest
 
 from awescholar.utils import retry_with_backoff, since_filter
@@ -34,7 +35,7 @@ def test_retry_succeeds_after_transient_failures(monkeypatch):
 def test_retry_reraises_after_exhaustion(monkeypatch):
     monkeypatch.setattr("time.sleep", lambda s: None)
     fn = _flaky(5)
-    with pytest.raises(Exception):
+    with pytest.raises(httpx.ReadTimeout):
         retry_with_backoff(fn, max_attempts=3)
     assert fn.calls["calls"] == 3
 

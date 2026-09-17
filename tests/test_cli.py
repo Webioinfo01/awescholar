@@ -249,3 +249,165 @@ def test_backfill_fields_scope_dispatch(tmp_path, monkeypatch):
     args.fields = None
     cli.cmd_backfill(args, {"ss_api_key": None})
     assert calls == ["citations", "affiliation", "citations"]
+
+
+# ── AgentX mode: updater add --agentx / backfill --agentx / verify --agentx ──
+
+def _agentx_snapshot(path, agents):
+    path.write_text(json.dumps(
+        {"agents": agents, "counts": {"total": len(agents), "gone": 0}}),
+        encoding="utf-8")
+
+
+def _agentx_args(tmp_path, **kw):
+    base = {"archive": str(tmp_path / "data" / "agents-snapshot.json"),
+            "agentx": True, "repo": None, "from_json": None, "category": None,
+            "name": None, "tags": None, "paper": None, "homepage": None,
+            "description": None}
+    base.update(kw)
+    return argparse.Namespace(**base)
+
+
+def test_updater_add_agentx_registers_repo(tmp_path, monkeypatch):
+    from awescholar import cli
+    from awescholar.agentx import intake
+
+    snap = tmp_path / "data" / "agents-snapshot.json"
+    snap.parent.mkdir(parents=True)
+    _agentx_snapshot(snap, [])
+    calls = {}
+
+    def fake_add(archive, repo, **kw):
+        calls.update(archive=archive, repo=repo, category=kw.get("category"))
+        return {"slug": "x", "repo": repo}
+
+    monkeypatch.setattr(intake, "add_agent", fake_add)
+    args = _agentx_args(tmp_path, repo="owner/repo", category="benchmarks",
+                        tags="Stanford, NeurIPS")
+    assert cli.cmd_add(args, {"github_token": None}) == 0
+    assert calls["repo"] == "owner/repo"
+    assert calls["category"] == "benchmarks"
+    assert calls["archive"] == str(snap)
+
+
+def test_updater_add_agentx_from_json_dispatch(tmp_path, monkeypatch, capsys):
+    from awescholar import cli
+    from awescholar.agentx import intake
+
+    snap = tmp_path / "data" / "agents-snapshot.json"
+    snap.parent.mkdir(parents=True)
+    _agentx_snapshot(snap, [])
+    calls = {}
+    monkeypatch.setattr(intake, "add_from_json",
+                        lambda archive, path, **kw: calls.update(archive=archive) or 0)
+    candidate = tmp_path / "candidates.json"
+    candidate.write_text('{"agents": []}', encoding="utf-8")
+    args = _agentx_args(tmp_path, from_json=str(candidate))
+    assert cli.cmd_add(args, {"github_token": None}) == 0
+    assert calls["archive"] == str(snap)
+
+
+def test_updater_add_agentx_requires_repo_or_from_json(tmp_path):
+    from awescholar import cli
+
+    args = _agentx_args(tmp_path)
+    assert cli.cmd_add(args, {"github_token": None}) == 1
+
+
+def test_updater_add_paper_mode_still_interactive(tmp_path, monkeypatch):
+    from awescholar import cli, record
+
+    called = {}
+    monkeypatch.setattr(record, "add_interactive",
+                        lambda **kw: called.update(kw))
+    args = _agentx_args(tmp_path, agentx=False,
+                        archive=str(tmp_path / "data.json"))
+    cli.cmd_add(args, {})
+    assert called["archive_path"] == str(tmp_path / "data.json")
+
+
+def test_backfill_agentx_dispatches_paper_meta_and_citations(tmp_path, monkeypatch):
+    from awescholar import cli
+    from awescholar.agentx import papers_fill
+
+    calls = []
+    monkeypatch.setattr(papers_fill, "enrich_papers",
+                        lambda *a, **kw: calls.append(("enrich", kw.get("force"))))
+    monkeypatch.setattr(papers_fill, "refresh_citations",
+                        lambda *a, **kw: calls.append(("refresh", None)))
+
+    args = argparse.Namespace(archive=str(tmp_path / "snap.json"), agentx=True,
+                              fields=["paper-meta"], only=["bio"], refresh=True,
+                              no_backup=True)
+    cli.cmd_backfill(args, {"ss_api_key": None})
+    assert calls == [("enrich", True)]
+
+    calls.clear()
+    args.fields = ["citations"]
+    cli.cmd_backfill(args, {"ss_api_key": None})
+    assert calls == [("refresh", None)]
+
+    calls.clear()
+    args.fields = None  # default: paper-meta + citations
+    args.refresh = False
+    cli.cmd_backfill(args, {"ss_api_key": None})
+    assert calls == [("enrich", False), ("refresh", None)]
+
+
+def test_backfill_agentx_rejects_affiliation_field(tmp_path, capsys):
+    from awescholar import cli
+
+    args = argparse.Namespace(archive=str(tmp_path / "snap.json"), agentx=True,
+                              fields=["affiliation"], only=None, refresh=False,
+                              no_backup=True)
+    assert cli.cmd_backfill(args, {"ss_api_key": None}) == 1
+    assert "affiliation" in capsys.readouterr().err
+
+
+def test_verify_agentx_passes_clean_snapshot(tmp_path, capsys):
+    from awescholar import cli
+
+    snap = tmp_path / "agents-snapshot.json"
+    _agentx_snapshot(snap, [{
+        "slug": "alpha-agent", "name": "Alpha Agent", "repo": "example/alpha-agent",
+        "githubUrl": "https://github.com/example/alpha-agent", "homepage": None,
+        "paper": None, "category": "benchmarks", "tags": [],
+        "language": "Python", "stars": 1, "pushedAt": "2026-09-01T00:00:00Z",
+        "openIssues": 0, "license": "MIT", "description": "d", "status": "active",
+        "source": "manual", "sourceUrl": None,
+    }])
+    args = argparse.Namespace(agentx=True, archive=str(snap))
+    assert cli.cmd_verify(args, {}) == 0
+    assert "Snapshot OK: 1 agents" in capsys.readouterr().out
+
+
+def test_verify_agentx_reports_problems_and_exit_code(tmp_path, capsys):
+    from awescholar import cli
+
+    snap = tmp_path / "agents-snapshot.json"
+    _agentx_snapshot(snap, [{
+        "slug": "alpha-agent", "name": "Alpha Agent", "repo": "example/alpha-agent",
+        "githubUrl": "https://github.com/example/alpha-agent", "homepage": None,
+        "paper": None, "category": "not-a-category", "tags": [],
+        "language": "Python", "stars": -1, "pushedAt": None,
+        "openIssues": 0, "license": None, "description": None, "status": "active",
+    }])
+    args = argparse.Namespace(agentx=True, archive=str(snap))
+    assert cli.cmd_verify(args, {}) == 1
+    out = capsys.readouterr().out
+    assert "problem(s)" in out and "unknown category" in out
+
+
+def test_verify_agentx_requires_flag(tmp_path, capsys):
+    from awescholar import cli
+
+    args = argparse.Namespace(agentx=False, archive=str(tmp_path / "x.json"))
+    assert cli.cmd_verify(args, {}) == 1
+    assert "--agentx" in capsys.readouterr().err
+
+
+def test_cli_help_lists_verify_command():
+    result = _run_cli("--help")
+    combined = result.stdout + result.stderr
+    assert result.returncode == 0
+    assert "verify" in combined

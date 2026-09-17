@@ -14,17 +14,16 @@ way to know agentx's categories.
 """
 
 import json
-import re
 
 from pydantic import BaseModel
 
+from .agentx.snapshot import slugify
 from .github import fetch_repo, owner_repo_from_url, stars_from_repo
 
 
 def agentx_slugify(text: str) -> str:
-    """Mirror agentx slugify(): lowercase, non-alphanumeric runs to '-', trimmed."""
-    slug = re.sub(r"[^a-z0-9]+", "-", (text or "").lower()).strip("-")[:64]
-    return slug or "agent"
+    """The registry slugify, Unicode-aware like the former agentx-cli."""
+    return slugify(text or "")
 
 
 def _first_author(team: str) -> str:
@@ -173,9 +172,9 @@ def export_agentx(archive_path: str, output_path: str, token: str | None = None,
     """Write an AgentX-shaped candidate file from papers with GitHub repos.
 
     The output is data, not commands: ingestion into a hub is the maintainer's
-    `agentx add --from-json <file>` (agentx-cli), which re-validates and
-    re-fetches live metrics — so this exporter hardcodes nothing about the
-    target CLI's invocation shape.
+    `awescholar updater add --agentx --from-json <file>`, which re-validates
+    and re-fetches live metrics — so this exporter hardcodes nothing about
+    the intake command's invocation shape.
 
     With `llm_model` set (and a snapshot for the category list), each
     candidate's agentx category is picked by the configured model instead of

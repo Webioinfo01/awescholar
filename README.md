@@ -26,6 +26,10 @@
 
 A lightweight CLI that automates the paper curation workflow: query Semantic Scholar, annotate with LLM, filter by quality, generate Markdown reports, and incrementally merge into a maintained project data JSON. Designed for both human and AI-agent operation — install the skill, and your coding agent can run the entire pipeline from natural-language requests.
 
+awescholar now serves two orientations with one tool — **paper-oriented awesome lists** (data.json archive: crawler → updater → render → reader) and the **project-oriented AgentX hub** (data/agents-snapshot.json snapshot: updater --agentx commands + verify). The same entity is both a paper record and an agent record; `render agentx` bridges them.
+
+> **Deprecation notice:** the standalone `agentx-cli` (npm `agentx-hub-cli`) is deprecated as of awescholar 0.3.0. All its commands now live here.
+
 ## Powered by awescholar
 
 - **[Awesome AI Meets Biology](https://github.com/Webioinfo01/Awesome-AI-Meets-Biology)** — AI x biology paper curation powered by awescholar for automated discovery, filtering, and README updates.
@@ -281,6 +285,27 @@ awescholar reader stats --archive data.json           # Archive statistics
 awescholar reader stats --archive data.json --category "AI Agents"   # Stats for one category (repeatable)
 ```
 
+## AgentX hub
+
+The typical hub workflow:
+
+```text
+render agentx → updater add --agentx --from-json → updater enrich --agentx → verify --agentx → commit
+```
+
+Command mapping (old `agentx-cli` → new `awescholar`):
+
+| Old `agentx-cli` | New `awescholar` |
+|---|---|
+| `agentx add owner/repo --category X --tags A,B` | `awescholar updater add --agentx owner/repo --category X [--tags "A,B"] [--name] [--paper] [--homepage] [--description]` |
+| `agentx add --from-json F` | `awescholar updater add --agentx --from-json F` (batch, all-or-nothing) |
+| `agentx snapshot` | `awescholar updater enrich --agentx [--archive data/agents-snapshot.json]` (metrics + lifecycle: 404→gone, status re-derivation, retirement freeze, license fallback; `--archive` defaults to `data/agents-snapshot.json` in `--agentx` mode) |
+| `agentx enrich-papers` | `awescholar updater backfill --agentx --fields paper-meta [--refresh] [--only slug-substring]` |
+| `agentx refresh-citations` | `awescholar updater backfill --agentx --fields citations` |
+| `agentx validate` | `awescholar verify --agentx` (offline invariants gate; CI runs this) |
+
+Environment variables: `GITHUB_TOKEN` (recommended), `SEMANTIC_SCHOLAR_API_KEY` or `SEMANTICSCHOLAR_API_KEY` (recommended for backfill).
+
 Each subcommand accepts `--input` (or positional `input` for report) to read from a specific file instead of the default path. This lets you re-run any step independently without re-running the full pipeline.
 
 `crawler run --month 2026-05` replaces the copy-a-config-per-month workflow: it derives the search dates (`2026-05-01:2026-05-31`, leap years included), the output directory (`month_reports/2605`), and the report name (`report.md`) from one argument, so a single tracked base config serves every month. `--period 2026-06-1` is the half-month face of the same idea (`P=1` is 01–15, `P=2` is 16–end; output lands in `month_reports/YYMM_P`). `--month`, `--period`, and `--date` are mutually exclusive. The default report filename is `{db_path}/report.md` — the model name no longer leaks into it; instead every report opens with a provenance comment recording the awescholar version, the model, and the date scope. `render digest --month 2026-05` is the other face of a monthly report: it summarizes the papers already curated in `data.json` for that month (by their `year` field), with an LLM narrative when a model is configured or structured tables with `--no-llm` — useful for publishing a digest that always matches what the archive actually holds.
@@ -289,7 +314,7 @@ The filter step gates on scope before quality: papers whose subject falls outsid
 
 `updater enrich` links papers to their official GitHub repositories. Papers without a `codeUrl` are searched on GitHub (arXiv ID first, then the leading system name, then the full title — a round whose candidates are all rejected falls through to the next); a heuristic scorer accepts only corroborated matches — a repo name derivable from the paper title plus an arXiv ID cited by the repo itself — and ambiguous races go to the configured LLM for a final verdict (`--no-llm` keeps heuristics only). The star shape is a config convention, not a flag decision: with `archive.stars_style: "badge"` (e.g. [Awesome-AI-Meets-Biology](https://github.com/Webioinfo01/Awesome-AI-Meets-Biology)) enrich writes `https://img.shields.io/github/stars/owner/repo` into `githubStars` and never rewrites an existing badge URL to a number; the default `numeric` refreshes bare ints and migrates legacy badge values. `--only "DOI or title substring"` (repeatable) scopes the run to matching entries — the same flag exists on `updater backfill` — so one entry can be topped up without touching the rest of the archive. A `GITHUB_TOKEN` is strongly recommended (config `github.token`, `GITHUB_TOKEN` env, or `--github-token`): the anonymous tier allows only 10 searches/minute and 60 repo reads/hour.
 
-`render agentx` turns archive papers that carry a github.com repo into candidate agents for an [AgentX](https://github.com/Webioinfo01/agentx-hub)-style registry: the output matches the agentx snapshot entry shape (slug/name/repo/paperMeta/category plus live metrics when a token is available), with slugs generated by agentx rules. Map your archive categories to agentx category slugs via a `--category-map` JSON file; unmapped papers fall into `--default-category`. No category list is hardcoded here: when `--exclude-snapshot` points at an agentx snapshot, the categories actually present in that file are the source of truth, and mapped or default slugs missing from it draw a warning (without a snapshot there is no validation). The file is a review queue for agentx intake, not a drop-in snapshot — `source`/`sourceUrl` record provenance on every exported agent. Ingestion is the maintainer's `agentx add --from-json <file>` (agentx-cli) inside the hub checkout, which re-validates categories and re-fetches live metrics on its side (tags are deliberately not exported; the tag registry belongs to the target repo). `--llm-category` (needs `--exclude-snapshot` for the category list) asks the configured annotator model to pick each candidate's agentx category instead of leaving everything on the `--default-category` floor; picks are kept only when the slug exists in the target snapshot.
+`render agentx` turns archive papers that carry a github.com repo into candidate agents for an [AgentX](https://github.com/Webioinfo01/agentx-hub)-style registry: the output matches the agentx snapshot entry shape (slug/name/repo/paperMeta/category plus live metrics when a token is available), with slugs generated by agentx rules. Map your archive categories to agentx category slugs via a `--category-map` JSON file; unmapped papers fall into `--default-category`. No category list is hardcoded here: when `--exclude-snapshot` points at an agentx snapshot, the categories actually present in that file are the source of truth, and mapped or default slugs missing from it draw a warning (without a snapshot there is no validation). The file is a review queue for agentx intake, not a drop-in snapshot — `source`/`sourceUrl` record provenance on every exported agent. Ingestion is the maintainer's `awescholar updater add --agentx --from-json <file>` (replaces the former `agentx add --from-json` from agentx-cli) inside the hub checkout, which re-validates categories and re-fetches live metrics on its side (tags are deliberately not exported; the tag registry belongs to the target repo). `--llm-category` (needs `--exclude-snapshot` for the category list) asks the configured annotator model to pick each candidate's agentx category instead of leaving everything on the `--default-category` floor; picks are kept only when the slug exists in the target snapshot.
 
 `updater search` writes canonical links and can carry known facts: `paperUrl` prefers the DOI link (`https://doi.org/…`) over the Semantic Scholar page, `--code-url owner/repo` writes a repo you already know into `codeUrl` (with `archive.stars_style: "badge"` it also writes the shields.io badge into `githubStars`), and `--annotate` fills the one-line `domain` of the added papers with the configured annotator LLM — the same annotator the crawler pipeline uses, run once over just the new records. After papers land, `updater search --archive` and `updater update --direction new2old` print the natural next step (`render counts` / `render rss`) so README counts and the RSS feed never silently go stale.
 

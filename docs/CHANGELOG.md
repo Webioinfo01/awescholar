@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.3.0 - 2026-09-17
+
+AgentX absorption release — the standalone agentx-cli (TypeScript) is fully replaced by awescholar, one tool for both orientations: awesome-list projects are paper-oriented (the archive is a category dict of paper records) and the AgentX hub is project-oriented (the snapshot is a slug-sorted agent list keyed by GitHub repo). The registry logic — tag policy, lifecycle rules, writer invariants — now lives in `awescholar.agentx`, and every former agentx-cli command has an awescholar equivalent. No Node runtime, no subprocess bridge, no shape-sniffing version detection.
+
+### Highlights
+
+- `updater add --agentx owner/repo --category <slug> [--tags "A,B"]` replaces `agentx add`: validates the repo against the registry category/tag policy, fetches live GitHub metrics, derives the initial status, appends in stable slug order
+- `updater add --agentx --from-json candidates.json` replaces `agentx add --from-json`: batch-intakes a `render agentx` candidate file, all-or-nothing
+- `updater enrich --agentx` now covers the full former `agentx snapshot`: the GitHub metrics refresh (existing) plus the lifecycle pass (new) — 404 → gone via HEAD checks, status re-derivation, retirement freeze/clear, NOASSERTION license text fallback — and writes slug-sorted with recomputed counts
+- `updater backfill --agentx` replaces `agentx enrich-papers` and `agentx refresh-citations`: `--fields paper-meta` resolves paperMeta from DOI/arXiv/title clues via Semantic Scholar (`--refresh` re-resolves existing records), `--fields citations` refreshes citation counts; default fills both
+- New top-level `verify --agentx` replaces `agentx validate`: the offline writer-invariants gate (CI runs exactly this), exit 1 with an itemized problem list on any violation
+- `render agentx` unchanged in behavior; its output now documents the new intake command
+- `agentx_slugify` is now Unicode-aware, matching the former TypeScript slugify (CJK and accented names slug identically on both sides); newly exported slugs with non-ASCII names may differ from previous ASCII-only exports
+- Breaking: the `agentx` npm binary is deprecated — replace `agentx add|snapshot|enrich-papers|refresh-citations|validate` with the awescholar commands above; `--archive` defaults to `data/agents-snapshot.json` in `--agentx` mode
+
 ## v0.2.5 - 2026-09-17
 
 ### Features
@@ -15,67 +30,6 @@
 ### Fixes
 - Dedupe now holds back author-roster-overlap and `codeUrl`-collision pairs for review, not only title similarity; new records stamp `addedAt`; `updater enrich --since YYYY-MM-DD` scopes to entries added on/after that date; `updater publish-scan --pair PREPRINT PUBLISHED` queues manual preprint→published upgrades for retitled twins; `retry_with_backoff` wraps network, LLM, and Semantic Scholar calls for transient-failure resilience
 - Archive backups skip timestamped copies when the target file is git-clean; half-month period support via `crawler run --period`
-
-
-## Unreleased
-
-`render agentx` exports data only — the `--emit commands` shell-script mode is gone. Emitting another CLI's invocation shape (verb, flags, escaping, working directory) from inside awescholar was the wrong direction; a hub now ingests the candidate JSON with `agentx add --from-json <file>` (agentx-cli), which re-validates and re-fetches live metrics on its side.
-
-### Highlights
-
-- `render agentx` always writes the snapshot-shaped candidate JSON; the `--emit` flag is removed
-- Breaking: replace `--emit commands` scripts with `agentx add --from-json candidates.json` run inside the AgentX hub checkout
-
-CLI regrouped by first principles — every command that only derives artifacts from the project data JSON moves from `updater` to a new `render` group, and citation backfill folds into `updater backfill`; `updater` is now purely the archive-data lifecycle (12 subcommands → 6).
-
-### Highlights
-
-- New `render` group — `render readme` / `render counts` / `render rss` / `render digest` / `render agentx` (formerly `updater readme`/`counts`/`rss`/`digest`/`export-agentx`) — everything that reads `data.json` and writes a derived artifact; rendering never modifies the archive
-- `updater citations` folds into `updater backfill --fields citations` (repeatable; default fills affiliation/team and citations) — both were fill-empty-fields passes over the same archive, so they share one command
-- `updater` keeps exactly the archive-data lifecycle: `search`, `add`, `update`, `dedupe`, `enrich` (incl. the `--agentx` snapshot refresh), `backfill`
-- The `Next:` hints after `updater search --archive` and `updater update --direction new2old` now point at `render counts` / `render rss`, and the scaffolded CONTRIBUTING.md writes the new names
-- Breaking: the moved and merged names (`updater readme|counts|rss|digest|export-agentx|citations`) are gone without aliases — switch scripts to the `render` names or `backfill --fields citations`; `updater search` and the other retained subcommands are unchanged
-
-New `updater publish-scan` — scan archived preprints for published versions and upgrade them in place, plus a fix that makes preprint detection cover every preprint server (not just arXiv).
-
-### Highlights
-
-- `updater publish-scan --archive data.json` checks every archived preprint against Semantic Scholar (by DOI, then fuzzy S2 title search, then Crossref `query.title` — title drift between preprint and version of record is the norm, and S2's relevance search sometimes surfaces only citers) and queues the version-of-record metadata into `publish_review.json` next to the archive; title-matched candidates must clear dedupe-grade similarity plus a non-empty venue, which rejects repost copies (ResearchHub and the like) that reuse the exact title
-- `--apply` upgrades in one shot: venue, DOI, paperUrl, year, authors and citations switch to the published version, while category, codeUrl, githubStars, domain and affiliation stay; `--review <file> --apply` applies a reviewed queue without rescanning; `--only`/`--limit` scope the scan, `--no-title-search` keeps it DOI-only
-- Preprint detection (`is_preprint`) now covers bioRxiv/medRxiv (old `10.1101` and new `10.64898` prefixes), Research Square, Preprints.org, ChemRxiv, Authorea and SSRN in addition to arXiv — a bioRxiv DOI never contains "arxiv", so the old substring check silently missed every non-arXiv preprint server
-- As a direct consequence, `updater dedupe --keep published` now correctly prefers a journal version over a bioRxiv/medRxiv preprint when resolving held-back pairs (previously the tie kept the preprint and dropped the published metadata)
-
-Monthly-report workflow — `crawler run --month` (and half-month `--period`) replaces copy-a-config-per-month, `render digest` summarizes a month straight from the archive, report filenames no longer embed the model name, and the filter gates on scope before venue prestige.
-
-### Highlights
-
-- New `crawler run --month 2026-05` (also on `crawler search`; mutually exclusive with `--date` and `--period`) derives the search dates (`2026-05-01:2026-05-31`, leap years included), the output directory (`month_reports/2605`), and the report name from one argument, overriding `search.publication_date` and `output.db_path` — one tracked base config serves every month, no more hand-copied per-month config files
-- New `crawler run --period 2026-06-1` is the half-month face (`P=1` is 01–15, `P=2` is 16–end; output `month_reports/YYMM_P`)
-- New `render digest --archive docs/data.json --month 2026-05` (formerly `updater digest` before the CLI regroup) summarizes the papers a curated archive holds for one month (matched by the `year` field, `2026.05` and unpadded `2026.5` both match): an LLM narrative when a model is configured, structured tables with `--no-llm` or when no key resolves; output defaults to `month_reports/YYMM/digest.md`, and an empty month fails with an actionable error instead of an empty report
-- The default report filename is `{db_path}/report.md` instead of `research_report_{model}.md` — the model name moves into a provenance comment at the top of every report (`<!-- awescholar <version> · model: ... · scope: ... -->`), so per-month report paths are stable across model changes
-- The filter step now gates on scope before quality: papers whose subject falls outside the research interests (sharing a technique like an LLM but applied in an unrelated domain) are excluded regardless of venue prestige, the annotator-assigned `domain` is sent to the filterer as an off-scope signal, and `filter.limit` is an upper bound rather than a quota — fewer selections is a normal outcome, ending the traffic-prediction-in-a-biology-report failure mode
-
-Single-paper curation pass — DOI-first paper links, `--code-url` and `--annotate` on `updater search`, `--only` scoping on enrich/backfill/citations, the `archive.stars_style` config convention, and `--emit commands` for agentx intake.
-
-### Highlights
-
-- `updater search` writes `paperUrl` as the DOI link (`https://doi.org/…`) whenever the paper has a DOI — the Semantic Scholar page URL is the last-resort fallback, never the first choice
-- New `updater search --code-url owner/repo --annotate`: a repo you already know goes straight into `codeUrl` (skipping GitHub discovery; with `archive.stars_style: "badge"` the shields.io URL lands in `githubStars` too), and the configured annotator LLM fills the one-line `domain` of just the added papers — the same annotator the crawler pipeline uses, one batch call, LLM failure never loses the added records
-- New `--only "DOI or title substring"` (repeatable) scopes `updater enrich`, `updater backfill`, and citation fills to matching entries — topping up one entry no longer rewrites the whole archive (backfill's trusted-name map still spans the whole archive)
-- New config `archive.stars_style`: `numeric` (default) keeps refreshing bare ints and migrating legacy badge values; `badge` makes enrich write shields.io URLs and never rewrite an existing badge to a number — the Awesome-AI-Meets-Biology star convention is now config, not documentation; `--stars-style` overrides per run
-- New `render agentx --emit commands` (formerly `updater export-agentx --emit commands`): writes an executable `pnpm agent:add owner/repo --category … --name … --paper …` script instead of candidate JSON — the last mile into an agentx repo, where the target's own `agent:add` still validates categories and the tag registry (tags are deliberately not emitted)
-- `updater search --archive` and `updater update --direction new2old` print the natural next step (`render counts` / `render rss`) after papers land, so README counts and the RSS feed never silently go stale
-
-Robustness and ops polish — quieter git-aware backups, stronger retitled-duplicate detection, half-month periods, manual publish-scan pairs, and network retries.
-
-### Highlights
-
-- Archive backups skip timestamped copies when the target file is git-clean (`awescholar.backup`)
-- Dedupe holds back author-roster-overlap and `codeUrl`-collision pairs for review, not only title similarity
-- New records stamp `addedAt`; `updater enrich --since YYYY-MM-DD` scopes to entries added on/after that date (legacy rows without `addedAt` are always included)
-- `updater publish-scan --pair PREPRINT PUBLISHED` queues a manual preprint→published upgrade for retitled twins no database links
-- `retry_with_backoff` wraps network, LLM, and Semantic Scholar calls so transient failures do not abort a long enrich/publish-scan run
-
 
 ## v0.2.2
 
@@ -101,7 +55,6 @@ Citation-surface + GitHub-enrichment release — the website shows a citation ba
 - GitHub 403/429 responses now print a stderr warning instead of silently degrading to "no results", so a rate-limited run is distinguishable from an empty one
 - `updater search` (by title or DOI) requests `citationCount` and writes it into each record as `citations`, so `--json-file` output and archive additions carry live citation counts; the alias map accepts `citations`, `citationCount`, and `citation_count`, and archive merges keep existing counts when the incoming value is empty. `citations` is data-only — the README table gains no column
 - Search now stores the complete Semantic Scholar author list in a new `authors` field instead of keeping only the last author as `team`: `updater search` records and the crawler DB carry the full name list, normalization accepts both the DB blob (`all`) and plain-list forms so the list survives merging into project data, and archive merges treat an empty list as empty so gaps never wipe an existing list (project data records are now 13 fields, the updater pipeline 15)
-
 
 ## v0.2.1
 

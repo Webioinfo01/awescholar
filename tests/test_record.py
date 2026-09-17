@@ -394,7 +394,8 @@ def test_search_and_add_stamps_addedat(MockSS, mock_input):
         json_file = os.path.join(tmp, "papers.json")
         search_and_add(json_file=json_file, by="title")
 
-        papers = json.load(open(json_file))
+        with open(json_file, encoding="utf-8") as f:
+            papers = json.load(f)
         assert papers[0]["addedAt"], "addedAt must be stamped on insert"
         assert papers[0]["addedAt"].startswith("20")
 

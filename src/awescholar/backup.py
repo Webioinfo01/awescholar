@@ -26,12 +26,14 @@ def _git_clean(path: str) -> bool:
         tracked = subprocess.run(
             ["git", "-C", directory, "ls-files", "--error-unmatch", name],
             capture_output=True,
+            check=False,
         )
         if tracked.returncode != 0:
             return False
         unmodified = subprocess.run(
             ["git", "-C", directory, "diff", "--quiet", "--", name],
             capture_output=True,
+            check=False,
         )
         return unmodified.returncode == 0
     except OSError:

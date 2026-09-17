@@ -376,8 +376,29 @@ def cmd_search_record(args: argparse.Namespace, config: dict) -> int | None:
 
 
 def cmd_backfill(args: argparse.Namespace, config: dict) -> int | None:
+    if getattr(args, "agentx", False):
+        from .agentx.papers_fill import enrich_papers, refresh_citations
+
+        archive = args.archive or "data/agents-snapshot.json"
+        fields = args.fields or ["paper-meta", "citations"]
+        if "affiliation" in fields:
+            print("Error: --fields affiliation is paper-archive only; an AgentX "
+                  "snapshot has no affiliation field.", file=sys.stderr)
+            return 1
+        if "paper-meta" in fields:
+            enrich_papers(archive, force=bool(getattr(args, "refresh", False)),
+                          only=args.only, ss_api_key=config["ss_api_key"])
+        if "citations" in fields:
+            # Citation counts always refresh — null means "not indexed", not "empty".
+            refresh_citations(archive, ss_api_key=config["ss_api_key"])
+        return 0
+
     from .backfill import backfill_affiliations, backfill_citations
 
+    if not args.archive:
+        print("Error: --archive is required (or pass --agentx to backfill an "
+              "AgentX snapshot)", file=sys.stderr)
+        return 1
     fields = args.fields or ["affiliation", "citations"]
     if "affiliation" in fields:
         backfill_affiliations(
@@ -395,6 +416,12 @@ def cmd_backfill(args: argparse.Namespace, config: dict) -> int | None:
 def cmd_enrich(args: argparse.Namespace, config: dict) -> int | None:
     from .enrich import enrich_archive
 
+    if not args.archive and not args.agentx:
+        print("Error: --archive is required (or pass --agentx to refresh an "
+              "AgentX snapshot)", file=sys.stderr)
+        return 1
+    archive = args.archive or "data/agents-snapshot.json"
+
     model = api_key = base_url = None
     if not args.no_llm:
         model, api_key, base_url = resolve_agent_config(config, "enricher")
@@ -405,7 +432,7 @@ def cmd_enrich(args: argparse.Namespace, config: dict) -> int | None:
 
     stars_style = args.stars_style or config.get("stars_style") or "numeric"
     stats = enrich_archive(
-        archive_path=args.archive, token=token,
+        archive_path=archive, token=token,
         mode="agentx" if args.agentx else "archive",
         model=model or "", api_key=api_key, base_url=base_url,
         use_llm=not args.no_llm, limit=args.limit,
@@ -418,6 +445,8 @@ def cmd_enrich(args: argparse.Namespace, config: dict) -> int | None:
             suffix += f"; {stats['missing_repos']} unreachable"
         if stats["skipped_no_repo"]:
             suffix += f"; {stats['skipped_no_repo']} without a repo"
+        if stats.get("gone"):
+            suffix += f"; {stats['gone']} newly gone (404)"
         print(f"\nRefreshed {stats['refreshed']} agents{suffix}")
     else:
         print(f"\nResolved {stats['resolved']}/{stats['resolve_candidates']} repos · "
@@ -487,9 +516,72 @@ def cmd_digest(args: argparse.Namespace, config: dict) -> int | None:
 
 
 def cmd_add(args: argparse.Namespace, config: dict) -> int | None:
+    if getattr(args, "agentx", False):
+        from .agentx.intake import IntakeError, add_agent, add_from_json
+
+        archive = args.archive or "data/agents-snapshot.json"
+        if not args.from_json and not args.repo:
+            print("Error: pass owner/repo (single form) or --from-json FILE (batch)",
+                  file=sys.stderr)
+            return 1
+        if args.from_json and args.repo:
+            print("Error: --from-json takes no repo positional", file=sys.stderr)
+            return 1
+        try:
+            if getattr(args, "from_json", None):
+                add_from_json(archive, args.from_json,
+                              token=config.get("github_token"))
+            else:
+                tags = [t.strip() for t in (args.tags or "").split(",") if t.strip()]
+                add_agent(archive, args.repo, category=args.category, name=args.name,
+                          tags=tags, paper=args.paper, homepage=args.homepage,
+                          description=args.description,
+                          token=config.get("github_token"))
+        except IntakeError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        print("Next: awescholar verify --agentx   # offline snapshot check")
+        print("      git add data/agents-snapshot.json && git commit")
+        return 0
+
+    if args.repo or args.from_json:
+        print("Error: repo intake needs --agentx (paper records go interactive, "
+              "or use `updater search`)", file=sys.stderr)
+        return 1
+    if not args.archive:
+        print("Error: --archive is required (or pass --agentx to register repos "
+              "into an AgentX snapshot)", file=sys.stderr)
+        return 1
     from .record import add_interactive
 
     add_interactive(archive_path=args.archive, categories=config.get("categories"))
+
+
+def cmd_verify(args: argparse.Namespace, config: dict) -> int | None:
+    """Offline artifact gate — no network, no writes; CI runs this on PRs."""
+    from .agentx.snapshot import read_snapshot
+    from .agentx.validate import validate_snapshot_file
+
+    if not args.agentx:
+        print("Error: pass --agentx (only AgentX snapshot validation exists today)",
+              file=sys.stderr)
+        return 1
+    archive = args.archive or "data/agents-snapshot.json"
+    try:
+        file = read_snapshot(archive)
+    except (FileNotFoundError, json.JSONDecodeError) as exc:
+        print(f"Error: cannot read {archive}: {exc}", file=sys.stderr)
+        return 1
+    problems = validate_snapshot_file(file)
+    if problems:
+        print(f"{len(problems)} problem(s) in {archive}:")
+        for line in problems:
+            print(f"  - {line}")
+        return 1
+    agents = file.get("agents") if isinstance(file, dict) else None
+    print(f"Snapshot OK: {len(agents) if isinstance(agents, list) else 0} agents, "
+          "counts consistent.")
+    return 0
 
 
 # ── Reader (read-only archive queries) ───────────────────────
@@ -715,23 +807,57 @@ def main() -> int:
     p.add_argument("--annotate", action="store_true",
                    help="Fill the domain line of added papers with the configured annotator LLM")
 
-    p = updater_sub.add_parser("add", help="Interactively add a single record to project data JSON")
-    p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")
+    p = updater_sub.add_parser(
+        "add", help="Interactively add a single record to project data JSON; "
+                    "with --agentx, register a GitHub repo into an AgentX snapshot")
+    p.add_argument("repo", nargs="?", type=str, metavar="owner/repo",
+                   help="repo to register (with --agentx, single form)")
+    p.add_argument("--archive", type=str,
+                   help="Path to project data JSON; with --agentx, the AgentX "
+                        "snapshot (default: data/agents-snapshot.json)")
+    p.add_argument("--agentx", action="store_true",
+                   help="Treat --archive as an AgentX snapshot; validate the repo, "
+                        "fetch live metrics, apply the registry tag/category policy")
+    p.add_argument("--from-json", type=str, metavar="FILE",
+                   help="Batch-intake a candidate file from `awescholar render agentx` "
+                        "(with --agentx): {\"agents\": [...]} or a bare record array; "
+                        "all-or-nothing")
+    p.add_argument("--category", type=str, metavar="SLUG",
+                   help="AgentX category slug (with --agentx, single form; required)")
+    p.add_argument("--tags", type=str, metavar='"A,B"',
+                   help="Comma-separated objective attributions (with --agentx)")
+    p.add_argument("--name", type=str, help="Display name (default: repo name segment)")
+    p.add_argument("--paper", type=str, help="Peer-reviewed paper link")
+    p.add_argument("--homepage", type=str, help="Project homepage")
+    p.add_argument("--description", type=str,
+                   help="One-line summary (default: the GitHub repo description)")
 
     p = updater_sub.add_parser("backfill", help="Fill empty fields from publication databases "
                                                 "(Semantic Scholar, Crossref, OpenAlex)")
-    p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")
-    p.add_argument("--fields", action="append", choices=["affiliation", "citations"], metavar="FIELD",
+    p.add_argument("--archive", type=str,
+                   help="Path to project data JSON; with --agentx, the AgentX "
+                        "snapshot (default: data/agents-snapshot.json)")
+    p.add_argument("--fields", action="append", choices=["affiliation", "citations", "paper-meta"],
+                   metavar="FIELD",
                    help="Fill only these fields (repeatable): affiliation = affiliation+team, "
-                        "citations = citation counts (default: both)")
+                        "citations = citation counts (default: both). With --agentx: "
+                        "paper-meta = resolve paperMeta from paper clues, citations = "
+                        "refresh citation counts (default: paper-meta + citations)")
     p.add_argument("--only", action="append",
-                   help="Scope to entries whose DOI equals this or whose title contains it (repeatable)")
+                   help="Scope to entries whose DOI equals this or whose title contains it "
+                        "(repeatable; with --agentx, slugs containing it instead)")
+    p.add_argument("--agentx", action="store_true",
+                   help="Backfill an AgentX snapshot instead of a paper archive")
+    p.add_argument("--refresh", action="store_true",
+                   help="With --agentx --fields paper-meta: re-resolve records that "
+                        "already have paperMeta (like the old enrich-papers --force)")
     p.add_argument("--no-backup", action="store_true", help="Do not create a backup of the archive before updating")
 
     p = updater_sub.add_parser("enrich", help="Fill empty codeUrl from GitHub search and refresh "
                                               "githubStars; with --agentx, refresh an AgentX registry snapshot instead")
-    p.add_argument("--archive", type=str, required=True,
-                   help="Path to project data JSON (awesome-list) or, with --agentx, an AgentX snapshot JSON")
+    p.add_argument("--archive", type=str,
+                   help="Path to project data JSON (awesome-list) or, with --agentx, an AgentX snapshot "
+                        "JSON (default with --agentx: data/agents-snapshot.json)")
     p.add_argument("--limit", type=int, help="Resolve at most N papers without a repo (metrics refresh is unbounded; ignored in --agentx)")
     p.add_argument("--only", action="append",
                    help="Scope to entries whose DOI equals this or whose title contains it (repeatable)")
@@ -783,7 +909,7 @@ def main() -> int:
                    help="Skip the LLM narrative; emit tables only (no model key needed)")
 
     p = render_sub.add_parser("agentx", help="Export papers with GitHub repos as AgentX candidate agents "
-                                              "(snapshot-shaped JSON for `agentx add --from-json`)")
+                                              "(snapshot-shaped JSON for `awescholar updater add --agentx --from-json`)")
     p.add_argument("--archive", type=str, required=True, help="Path to project data JSON")
     p.add_argument("-o", "--output", type=str, required=True, help="Output candidate JSON path")
     p.add_argument("--category-map", type=str,
@@ -834,6 +960,15 @@ def main() -> int:
                    help="Restrict to one or more categories (default: all categories in the archive)")
     p.add_argument("--json", action="store_true", help="Machine-readable output for agents")
 
+    # verify — offline artifact gate (CI runs exactly this)
+    p = sub.add_parser("verify", help="Offline artifact validation (no network, no writes); "
+                                      "CI runs this on every PR")
+    p.add_argument("--agentx", action="store_true",
+                   help="Validate an AgentX snapshot (default: data/agents-snapshot.json)")
+    p.add_argument("--archive", type=str,
+                   help="Path to the artifact; with --agentx, the AgentX snapshot "
+                        "(default: data/agents-snapshot.json)")
+
     # init
     p = sub.add_parser("init", help="Scaffold a new curated paper-list repository")
     p.add_argument("target_dir", type=str, nargs="?", default=".",
@@ -872,6 +1007,9 @@ def main() -> int:
 
     if getattr(args, "github_token", None):
         config["github_token"] = args.github_token
+
+    if args.command == "verify":
+        return cmd_verify(args, config) or 0
 
     if args.command == "init":
         return cmd_init(args, config) or 0

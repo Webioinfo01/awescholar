@@ -12,14 +12,19 @@ Only empty codeUrl fields are filled; entries never move between categories.
 
 import json
 import re
+from datetime import datetime
 
 from pydantic import BaseModel
 
+from .agentx.snapshot import merge_snapshot_agent, unique_slug, write_snapshot
+from .agentx.transform import resolve_repo_status, resolve_retirement
 from .backup import backup_file
 from .github import (
     arxiv_id_from_paper,
     fetch_repo,
     owner_repo_from_url,
+    repo_exists,
+    resolve_repo_license,
     search_repositories,
     stars_from_repo,
 )
@@ -172,9 +177,8 @@ def _popularity_accept(best: dict, ranked: list, paper_year: int | None) -> bool
     if stars < POPULARITY_MIN_STARS:
         return False
     created = str(best.get("created_at") or "")[:4]
-    if paper_year is not None:
-        if not created or int(created) < paper_year - 1:
-            return False
+    if paper_year is not None and (not created or int(created) < paper_year - 1):
+        return False
     rival_stars = max((int(c.get("stargazers_count") or 0) for _, c in ranked[1:]), default=0)
     return stars >= POPULARITY_STAR_RATIO * max(rival_stars, 1)
 
@@ -477,12 +481,14 @@ def _enrich_agentx_snapshot(archive_path: str, *, token: str | None,
                             no_backup: bool = False, status_cb=print) -> dict:
     """Refresh an AgentX `{agents, counts}` snapshot from GitHub in place.
 
-    Each agent with a non-empty `repo` field gets the GitHub-derived field
-    set refreshed (including the `archived` flag). Every other field —
-    `status`, `slug`, `name`, `repo`, `githubUrl`, `paperMeta`, `category`,
-    `tags`, `source`, `sourceUrl`, `counts` — is preserved verbatim so
-    agentx's own snapshot script keeps owning the lifecycle (404 → "gone",
-    retirement resolution, slug dedup, `writeSnapshot`).
+    Two passes, matching the former `agentx snapshot` command end to end:
+    the metrics pass refreshes the GitHub-derived field set on each agent
+    (stars, pushedAt, openIssues, language, description, license, homepage
+    when curated-empty, and the `archived` flag), then the lifecycle pass
+    applies the registry's status policy — 404 → "gone" via a lightweight
+    HEAD check, status derivation and retirement freezing for everything
+    alive — and writes the file through agentx.snapshot.write_snapshot
+    (slug-sorted, counts recomputed, no timestamp).
     """
     with open(archive_path, "r", encoding="utf-8") as f:
         snapshot = json.load(f)
@@ -493,6 +499,7 @@ def _enrich_agentx_snapshot(archive_path: str, *, token: str | None,
             "not a category-dict archive; pass --agentx on the CLI, or run "
             "awescholar updater enrich without --agentx for awesome-list archives.")
 
+    # Pass 1: metrics refresh in memory.
     refreshed = missing = skipped = 0
     for agent in agents:
         repo_field = str(agent.get("repo") or "")
@@ -507,17 +514,83 @@ def _enrich_agentx_snapshot(archive_path: str, *, token: str | None,
             agent[key] = value
         refreshed += 1
 
+    # Pass 2: lifecycle policy — no-repo records pass through untouched, 404s
+    # go to the graveyard, live repos get their status re-derived; retirement
+    # freezes on first retirement and clears on recovery.
+    out: list[dict] = []
+    used_slugs: set[str] = set()
+    seen_repos: set[str] = set()
+    gone = 0
+    for agent in agents:
+        current_status = str(agent.get("status") or "")
+        if current_status == "no-repo":
+            slug = unique_slug(str(agent.get("slug") or "agent"), used_slugs)
+            out.append(merge_snapshot_agent(
+                agent, slug, None, current_status, agent.get("license")))
+            continue
+        repo_field = str(agent.get("repo") or "")
+        repo_key = repo_field.lower()
+        if repo_key in seen_repos:
+            status_cb(f"  duplicate repo in snapshot skipped: {repo_field}")
+            continue
+        seen_repos.add(repo_key)
+        slug = unique_slug(str(agent.get("slug") or "agent"), used_slugs)
+
+        exists = repo_exists(repo_field, token)
+        not_found = exists is False
+        status = current_status
+        if not_found:
+            status = "gone"
+            gone += 1
+        elif exists:
+            pushed_at = None
+            if agent.get("pushedAt"):
+                try:
+                    pushed_at = datetime.fromisoformat(str(agent["pushedAt"]))
+                except ValueError:
+                    pushed_at = None
+            paper_meta = agent.get("paperMeta") or {}
+            status = resolve_repo_status(
+                current_status=current_status,
+                archived=bool(agent.get("archived")),
+                stars=int(agent.get("stars") or 0),
+                pushed_at=pushed_at,
+                paper_venue=str(paper_meta.get("venue") or ""),
+                auto_stable_exempt=bool(agent.get("autoStableExempt")),
+            )
+
+        retirement = resolve_retirement(
+            current_status=current_status,
+            next_status=status,
+            archived=bool(agent.get("archived")),
+            not_found=not_found,
+            stars=int(agent.get("stars") or 0),
+            retired_reason=agent.get("retiredReason"),
+            retired_stars=agent.get("retiredStars"),
+        )
+
+        # NOASSERTION licenses skipped by pass 1 get the /license text
+        # fallback here; existing SPDX values stay untouched.
+        license_spdx = agent.get("license")
+        if license_spdx is None and exists is not False:
+            license_spdx = resolve_repo_license(
+                repo_field, {"spdx_id": "NOASSERTION"}, token)
+
+        merged = merge_snapshot_agent(agent, slug, None, status, license_spdx)
+        merged["retiredReason"] = retirement.retired_reason
+        merged["retiredStars"] = retirement.retired_stars
+        out.append(merged)
+
     if not no_backup:
         backup_path = backup_file(archive_path)
         if backup_path:
             status_cb(f"Created backup: {backup_path}")
 
-    with open(archive_path, "w", encoding="utf-8") as f:
-        json.dump(snapshot, f, indent=2, ensure_ascii=False)
-        f.write("\n")
+    write_snapshot(archive_path,
+                   {"agents": out, "counts": {"total": len(out), "gone": gone}})
 
     return {"refreshed": refreshed, "missing_repos": missing,
-            "skipped_no_repo": skipped}
+            "skipped_no_repo": skipped, "gone": gone}
 
 
 def enrich_archive(archive_path: str, token: str | None = None, *, mode: str = "archive",

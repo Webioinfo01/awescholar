@@ -132,13 +132,13 @@ def _lookup_doi_local(doi: str) -> dict | None:
                     "_source": str(db),
                 }
                 break
-        except Exception:  # noqa: BLE001 — corrupt db must not abort the lookup
+        except Exception:  # noqa: BLE001, S112 — corrupt db must not abort the lookup
             continue
     if best is None:
         for jf in sorted(Path(".").glob("month_reports/*/updater_filter.json"), reverse=True):
             try:
                 data = json.loads(jf.read_text())
-            except Exception:
+            except Exception:  # noqa: BLE001, S112 — corrupt file must not abort the lookup
                 continue
             for cat, papers in (data.items() if isinstance(data, dict) else []):
                 if not isinstance(papers, list):

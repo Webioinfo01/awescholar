@@ -1,12 +1,12 @@
 """Project data field normalization."""
 
 import ast
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 
 def utc_now_iso() -> str:
     """UTC timestamp for the addedAt provenance field."""
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def normalize_title(title) -> str:

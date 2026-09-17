@@ -375,7 +375,7 @@ def _read_snapshot(path):
         return json.load(f)
 
 
-def test_enrich_agentx_updates_only_github_fields_and_preserves_status():
+def test_enrich_agentx_updates_github_fields_and_derives_status():
     with tempfile.TemporaryDirectory() as tmp:
         path = os.path.join(tmp, "agents-snapshot.json")
         _write_snapshot(path, {
@@ -401,7 +401,8 @@ def test_enrich_agentx_updates_only_github_fields_and_preserves_status():
                             open_issues_count=12,
                             description="Fresh description")
 
-        with patch("awescholar.enrich.fetch_repo", return_value=repo):
+        with patch("awescholar.enrich.fetch_repo", return_value=repo), \
+             patch("awescholar.enrich.repo_exists", return_value=True):
             stats = enrich_archive(path, token="t", mode="agentx", no_backup=True)
 
         data = _read_snapshot(path)
@@ -416,8 +417,10 @@ def test_enrich_agentx_updates_only_github_fields_and_preserves_status():
         assert agent["archived"] is False
         # Curated-first homepage preserved
         assert agent["homepage"] == "https://lab.example"
-        # Status and curated fields untouched
+        # Fresh repo re-derives to active; curated fields untouched
         assert agent["status"] == "active"
+        assert agent["retiredReason"] is None
+        assert agent["retiredStars"] is None
         assert agent["slug"] == "agentlaboratory"
         assert agent["repo"] == "SamuelSchmidgall/AgentLaboratory"
         assert agent["githubUrl"] == "https://github.com/SamuelSchmidgall/AgentLaboratory"
@@ -426,9 +429,9 @@ def test_enrich_agentx_updates_only_github_fields_and_preserves_status():
         assert agent["category"] == "autonomous-research"
         assert agent["tags"] == ["biology", "llm"]
         assert agent["source"] == "awescholar"
-        # top-level counts untouched
         assert data["counts"] == {"total": 1, "gone": 0}
-        assert stats == {"refreshed": 1, "missing_repos": 0, "skipped_no_repo": 0}
+        assert stats == {"refreshed": 1, "missing_repos": 0,
+                         "skipped_no_repo": 0, "gone": 0}
 
 
 def test_enrich_agentx_curated_homepage_wins_over_repo_homepage():
@@ -444,7 +447,9 @@ def test_enrich_agentx_curated_homepage_wins_over_repo_homepage():
         })
         repo = _agentx_repo("x/lab", homepage="https://project.example")
 
-        with patch("awescholar.enrich.fetch_repo", return_value=repo):
+        with patch("awescholar.enrich.fetch_repo", return_value=repo), \
+             patch("awescholar.enrich.repo_exists", return_value=True), \
+             patch("awescholar.enrich.resolve_repo_license", return_value=None):
             enrich_archive(path, token="t", mode="agentx", no_backup=True)
 
         agent = _read_snapshot(path)["agents"][0]
@@ -462,7 +467,9 @@ def test_enrich_agentx_fills_homepage_when_curated_empty():
         })
         repo = _agentx_repo("x/lab", homepage="https://project.example")
 
-        with patch("awescholar.enrich.fetch_repo", return_value=repo):
+        with patch("awescholar.enrich.fetch_repo", return_value=repo), \
+             patch("awescholar.enrich.repo_exists", return_value=True), \
+             patch("awescholar.enrich.resolve_repo_license", return_value=None):
             enrich_archive(path, token="t", mode="agentx", no_backup=True)
 
         agent = _read_snapshot(path)["agents"][0]
@@ -482,15 +489,18 @@ def test_enrich_agentx_leaves_null_homepage_alone():
         })
         repo = _agentx_repo("x/lab", homepage="https://project.example")
 
-        with patch("awescholar.enrich.fetch_repo", return_value=repo):
+        with patch("awescholar.enrich.fetch_repo", return_value=repo), \
+             patch("awescholar.enrich.repo_exists", return_value=True), \
+             patch("awescholar.enrich.resolve_repo_license", return_value=None):
             enrich_archive(path, token="t", mode="agentx", no_backup=True)
 
         agent = _read_snapshot(path)["agents"][0]
         assert agent["homepage"] is None
 
 
-def test_enrich_agentx_persists_owner_archived_flag():
-    """archived feeds the registry's same-run owner-archived → gone policy."""
+def test_enrich_agentx_owner_archived_goes_to_graveyard():
+    """The persisted archived flag feeds the same-run owner-archived → gone
+    policy; retirement freezes reason and stars."""
     with tempfile.TemporaryDirectory() as tmp:
         path = os.path.join(tmp, "agents-snapshot.json")
         _write_snapshot(path, {
@@ -500,12 +510,89 @@ def test_enrich_agentx_persists_owner_archived_flag():
         })
         repo = _agentx_repo("x/a", archived=True)
 
-        with patch("awescholar.enrich.fetch_repo", return_value=repo):
-            enrich_archive(path, token="t", mode="agentx", no_backup=True)
+        with patch("awescholar.enrich.fetch_repo", return_value=repo), \
+             patch("awescholar.enrich.repo_exists", return_value=True), \
+             patch("awescholar.enrich.resolve_repo_license", return_value=None):
+            stats = enrich_archive(path, token="t", mode="agentx", no_backup=True)
 
         agent = _read_snapshot(path)["agents"][0]
         assert agent["archived"] is True
-        assert agent["status"] == "active"  # lifecycle stays with the registry
+        assert agent["status"] == "gone"
+        assert agent["retiredReason"] == "owner-archived"
+        assert agent["retiredStars"] == 99
+        # counts.gone counts only the run's 404s — owner-archived repos flip
+        # status without being 404s (see agentx/validate.py).
+        assert _read_snapshot(path)["counts"] == {"total": 1, "gone": 0}
+        assert stats["gone"] == 0
+
+
+def test_enrich_agentx_404_marks_gone_and_freezes_retirement():
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "agents-snapshot.json")
+        _write_snapshot(path, {
+            "agents": [{"slug": "a", "name": "A", "repo": "x/a",
+                        "status": "active", "license": "MIT"}],
+            "counts": {"total": 1, "gone": 0},
+        })
+
+        with patch("awescholar.enrich.fetch_repo",
+                   return_value=_agentx_repo("x/a", stargazers_count=42)), \
+             patch("awescholar.enrich.repo_exists", return_value=False):
+            stats = enrich_archive(path, token="t", mode="agentx", no_backup=True)
+
+        data = _read_snapshot(path)
+        agent = data["agents"][0]
+        assert agent["status"] == "gone"
+        assert agent["retiredReason"] == "not-found"
+        assert agent["retiredStars"] == 42
+        assert data["counts"] == {"total": 1, "gone": 1}
+        assert stats["gone"] == 1
+
+
+def test_enrich_agentx_recovery_clears_graveyard_metadata():
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "agents-snapshot.json")
+        _write_snapshot(path, {
+            "agents": [{"slug": "a", "name": "A", "repo": "x/a",
+                        "status": "gone", "retiredReason": "idle",
+                        "retiredStars": 3, "license": "MIT"}],
+            "counts": {"total": 1, "gone": 1},
+        })
+
+        with patch("awescholar.enrich.fetch_repo",
+                   return_value=_agentx_repo("x/a", pushed_at="2026-09-16T00:00:00Z")), \
+             patch("awescholar.enrich.repo_exists", return_value=True):
+            stats = enrich_archive(path, token="t", mode="agentx", no_backup=True)
+
+        data = _read_snapshot(path)
+        agent = data["agents"][0]
+        assert agent["status"] == "active"
+        assert agent["retiredReason"] is None
+        assert agent["retiredStars"] is None
+        assert data["counts"] == {"total": 1, "gone": 0}
+        assert stats["gone"] == 0
+
+
+def test_enrich_agentx_dedupes_duplicate_repos():
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "agents-snapshot.json")
+        _write_snapshot(path, {
+            "agents": [
+                {"slug": "one", "name": "One", "repo": "x/dup",
+                 "status": "active", "license": "MIT"},
+                {"slug": "two", "name": "Two", "repo": "X/DUP",
+                 "status": "active", "license": "MIT"},
+            ],
+            "counts": {"total": 2, "gone": 0},
+        })
+
+        with patch("awescholar.enrich.fetch_repo", return_value=_agentx_repo("x/dup")), \
+             patch("awescholar.enrich.repo_exists", return_value=True):
+            enrich_archive(path, token="t", mode="agentx", no_backup=True)
+
+        agents = _read_snapshot(path)["agents"]
+        assert [a["slug"] for a in agents] == ["one"]
+        assert _read_snapshot(path)["counts"]["total"] == 1
 
 
 def test_enrich_agentx_skips_agents_without_repo():
@@ -514,7 +601,7 @@ def test_enrich_agentx_skips_agents_without_repo():
         _write_snapshot(path, {
             "agents": [
                 {"slug": "no-repo", "name": "NoRepo", "repo": "",
-                 "status": "active"},
+                 "status": "no-repo", "stars": 5},
                 {"slug": "real", "name": "Real", "repo": "x/real",
                  "status": "active"},
             ],
@@ -525,16 +612,24 @@ def test_enrich_agentx_skips_agents_without_repo():
             assert owner_repo == "x/real", f"unexpected fetch: {owner_repo!r}"
             return _agentx_repo("x/real", stargazers_count=10)
 
-        with patch("awescholar.enrich.fetch_repo", side_effect=fake_fetch):
+        def fake_exists(owner_repo, token):
+            assert owner_repo == "x/real", f"unexpected HEAD: {owner_repo!r}"
+            return True
+
+        with patch("awescholar.enrich.fetch_repo", side_effect=fake_fetch), \
+             patch("awescholar.enrich.repo_exists", side_effect=fake_exists), \
+             patch("awescholar.enrich.resolve_repo_license", return_value=None):
             stats = enrich_archive(path, token="t", mode="agentx", no_backup=True)
 
         agents = {a["slug"]: a for a in _read_snapshot(path)["agents"]}
-        assert "stars" not in agents["no-repo"]
+        assert agents["no-repo"]["stars"] == 5  # curated metrics never refreshed
+        assert agents["no-repo"]["status"] == "no-repo"
         assert agents["real"]["stars"] == 10
-        assert stats == {"refreshed": 1, "missing_repos": 0, "skipped_no_repo": 1}
+        assert stats == {"refreshed": 1, "missing_repos": 0,
+                         "skipped_no_repo": 1, "gone": 0}
 
 
-def test_enrich_agentx_does_not_touch_status_on_missing_repo():
+def test_enrich_agentx_does_not_touch_status_on_transient_failure():
     with tempfile.TemporaryDirectory() as tmp:
         path = os.path.join(tmp, "agents-snapshot.json")
         _write_snapshot(path, {
@@ -543,13 +638,16 @@ def test_enrich_agentx_does_not_touch_status_on_missing_repo():
             "counts": {"total": 1, "gone": 0},
         })
 
-        with patch("awescholar.enrich.fetch_repo", return_value=None):
+        with patch("awescholar.enrich.fetch_repo", return_value=None), \
+             patch("awescholar.enrich.repo_exists", return_value=None), \
+             patch("awescholar.enrich.resolve_repo_license", return_value=None):
             stats = enrich_archive(path, token="t", mode="agentx", no_backup=True)
 
         agent = _read_snapshot(path)["agents"][0]
         assert agent["status"] == "active"
         assert agent["stars"] == 999  # unchanged on fetch failure
-        assert stats == {"refreshed": 0, "missing_repos": 1, "skipped_no_repo": 0}
+        assert stats == {"refreshed": 0, "missing_repos": 1,
+                         "skipped_no_repo": 0, "gone": 0}
 
 
 def test_enrich_agentx_noassertion_license_preserves_existing():
@@ -562,14 +660,17 @@ def test_enrich_agentx_noassertion_license_preserves_existing():
         })
         repo = _agentx_repo("x/a", license={"spdx_id": "NOASSERTION"})
 
-        with patch("awescholar.enrich.fetch_repo", return_value=repo):
+        with patch("awescholar.enrich.fetch_repo", return_value=repo), \
+             patch("awescholar.enrich.repo_exists", return_value=True):
             enrich_archive(path, token="t", mode="agentx", no_backup=True)
 
         agent = _read_snapshot(path)["agents"][0]
         assert agent["license"] == "MIT"
 
 
-def test_enrich_agentx_noassertion_fills_when_license_curated_empty():
+def test_enrich_agentx_null_license_gets_text_fallback():
+    """NOASSERTION licenses skipped by the metrics pass get the /license text
+    fallback in the lifecycle pass (e.g. Creative Commons recognition)."""
     with tempfile.TemporaryDirectory() as tmp:
         path = os.path.join(tmp, "agents-snapshot.json")
         _write_snapshot(path, {
@@ -579,11 +680,15 @@ def test_enrich_agentx_noassertion_fills_when_license_curated_empty():
         })
         repo = _agentx_repo("x/a", license={"spdx_id": "NOASSERTION"})
 
-        with patch("awescholar.enrich.fetch_repo", return_value=repo):
+        with patch("awescholar.enrich.fetch_repo", return_value=repo), \
+             patch("awescholar.enrich.repo_exists", return_value=True), \
+             patch("awescholar.enrich.resolve_repo_license",
+                   return_value="CC-BY-4.0") as fallback:
             enrich_archive(path, token="t", mode="agentx", no_backup=True)
 
         agent = _read_snapshot(path)["agents"][0]
-        assert agent["license"] is None
+        assert agent["license"] == "CC-BY-4.0"
+        fallback.assert_called_once()
 
 
 def test_enrich_agentx_creates_backup_by_default_and_respects_no_backup():
@@ -591,11 +696,12 @@ def test_enrich_agentx_creates_backup_by_default_and_respects_no_backup():
         path = os.path.join(tmp, "agents-snapshot.json")
         _write_snapshot(path, {
             "agents": [{"slug": "a", "name": "A", "repo": "x/a",
-                        "stars": 1, "status": "active"}],
+                        "stars": 1, "status": "active", "license": "MIT"}],
             "counts": {"total": 1, "gone": 0},
         })
         with patch("awescholar.enrich.fetch_repo",
-                   return_value=_agentx_repo("x/a", stargazers_count=42)):
+                   return_value=_agentx_repo("x/a", stargazers_count=42)), \
+             patch("awescholar.enrich.repo_exists", return_value=True):
             enrich_archive(path, token="t", mode="agentx")  # backup on by default
 
         assert any(f.startswith("agents-snapshot.json.") and f.endswith(".bak")
@@ -604,11 +710,12 @@ def test_enrich_agentx_creates_backup_by_default_and_respects_no_backup():
         path2 = os.path.join(tmp, "agents-snapshot2.json")
         _write_snapshot(path2, {
             "agents": [{"slug": "a", "name": "A", "repo": "x/a",
-                        "stars": 1, "status": "active"}],
+                        "stars": 1, "status": "active", "license": "MIT"}],
             "counts": {"total": 1, "gone": 0},
         })
         with patch("awescholar.enrich.fetch_repo",
-                   return_value=_agentx_repo("x/a", stargazers_count=42)):
+                   return_value=_agentx_repo("x/a", stargazers_count=42)), \
+             patch("awescholar.enrich.repo_exists", return_value=True):
             enrich_archive(path2, token="t", mode="agentx", no_backup=True)
 
         backups = [f for f in os.listdir(tmp) if f.endswith(".bak")

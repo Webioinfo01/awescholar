@@ -1,6 +1,6 @@
 ---
 name: awescholar
-description: "Use when working with awescholar CLI — scientific literature discovery, annotation, filtering, and report generation. 中文触发词：文献检索、论文搜索、研究报告、awescholar、文献综述、更新数据、更新readme。"
+description: "Use when working with awescholar CLI — scientific literature discovery, annotation, filtering, and report generation, plus AgentX hub registry management. 中文触发词：文献检索、论文搜索、研究报告、awescholar、文献综述、更新数据、更新readme、agentx、agentx-hub、注册表、snapshot 校验。English: AgentX registry, agent snapshot, agentx hub."
 ---
 
 # Awescholar
@@ -55,6 +55,37 @@ Match the user's intent to a task domain, then follow the workflow below.
 5. For `render readme`: default behavior creates a timestamped `.bak` backup. Use `--no-backup` to skip. Git-clean files are also skipped by the archive backup helper.
 6. `reader` commands are read-only: they never modify the archive and need no `--config` (only `recommend --llm` does). Prefer `--json` when consuming programmatically, and answer the user following Response Format.
 7. Breaking rename: `updater readme|counts|rss|digest|export-agentx|citations` no longer exist. Use `render readme|counts|rss|digest|agentx` and `updater backfill --fields citations`.
+
+## Two Orientations: Awesome Paper List vs AgentX Project Registry
+
+Awescholar operates in two distinct orientations. The same command family serves both; the `--agentx` flag switches the data target.
+
+**Awesome paper-list orientation** (default, no `--agentx`)
+- Data file: `data.json` — a category dict of paper records (`{"AI Agents": [{paper}, …]}`).
+- Purpose: curate a bibliography of research papers.
+- Typical commands: `updater add/search/enrich/backfill --archive data.json`, `render readme/counts/rss/digest --archive data.json`.
+
+**AgentX project-registry orientation** (`--agentx`)
+- Data file: `data/agents-snapshot.json` — a slug-sorted list of agent records (`{agents: [{slug, repo, paperMeta, status, …}], counts: {…}}`).
+- Purpose: maintain a hub of projects that have GitHub repos (each "agent" is a project, optionally linked to a paper).
+- `--archive` defaults to `data/agents-snapshot.json` in this mode, so you can omit it if the file is at its standard location.
+
+**Relationship between the two**
+- A paper with a GitHub repo is a candidate agent. `render agentx --archive data.json -o candidates.json` projects the paper archive into agent-shaped candidate records.
+- `updater add --agentx --from-json candidates.json` ingests that candidate file into the snapshot — all-or-nothing, validates category/tag policy, derives initial status.
+- `updater enrich --agentx` refreshes GitHub metrics and runs the lifecycle pass (404 → gone, retirement, license fallback) on the snapshot in place.
+- `updater backfill --agentx --fields paper-meta` resolves `paperMeta` (DOI/arXiv/title clues → Semantic Scholar) for agents that arrived without a paper reference.
+
+**When to use which**
+
+| Task | Orientation | Commands |
+|---|---|---|
+| Add / merge new papers, update category tables | Awesome | `updater add/search`, `render readme/counts` |
+| Register a new agent, batch-intake candidates | AgentX | `updater add --agentx …`, `updater add --agentx --from-json FILE` |
+| Refresh GitHub stars, resolve 404s, lifecycle pass | AgentX | `updater enrich --agentx` |
+| Fill missing paperMeta or citation counts for agents | AgentX | `updater backfill --agentx [--fields …]` |
+| Validate snapshot invariants before merge (CI) | AgentX | `verify --agentx` |
+| Turn paper archive into agent candidate queue | Bridge | `render agentx --archive data.json -o candidates.json` |
 
 ## Workflows
 
@@ -324,6 +355,43 @@ awescholar updater enrich --archive agents-snapshot.json --agentx
 
 Needs `GITHUB_TOKEN` (config `github.token` > env `GITHUB_TOKEN` > `--github-token`); anonymous limits are 10 searches/min and 60 repo reads/hour. After enriching, regenerate the README so the numeric stars render as live badges.
 
+### AgentX Hub Commands
+
+Use these when the task is maintaining an AgentX-style project registry (the `data/agents-snapshot.json` hub file).
+
+```bash
+# Register a single agent (validates repo, fetches live metrics, derives status)
+awescholar updater add --agentx owner/repo --category <slug> [--tags "A,B"] [--name NAME] [--paper URL]
+
+# Batch-intake candidates from `render agentx` (all-or-nothing)
+awescholar updater add --agentx --from-json candidates.json
+
+# Full metrics + lifecycle refresh (404 → gone, retirement, license fallback)
+awescholar updater enrich --agentx
+
+# Backfill missing paper references or citation counts for registered agents
+awescholar updater backfill --agentx                        # paper-meta + citations (default)
+awescholar updater backfill --agentx --fields paper-meta    # resolve paperMeta from clues
+awescholar updater backfill --agentx --fields citations     # refresh citation counts
+awescholar updater backfill --agentx --fields paper-meta --refresh  # re-resolve existing paperMeta
+
+# Offline validation gate (CI runs this; exits 1 with itemized list on any violation)
+awescholar verify --agentx
+```
+
+**Migration from the deprecated `agentx-cli` (TypeScript)**
+
+| Old `agentx-cli` | Awescholar equivalent |
+|---|---|
+| `agentx add owner/repo` | `awescholar updater add --agentx owner/repo --category <slug>` |
+| `agentx add --from-json FILE` | `awescholar updater add --agentx --from-json FILE` |
+| `agentx snapshot` | `awescholar updater enrich --agentx` |
+| `agentx enrich-papers [--force]` | `awescholar updater backfill --agentx --fields paper-meta [--refresh]` |
+| `agentx refresh-citations` | `awescholar updater backfill --agentx --fields citations` |
+| `agentx validate` | `awescholar verify --agentx` |
+
+`--archive` defaults to `data/agents-snapshot.json` in `--agentx` mode; omit it when the snapshot is at the standard location.
+
 ### Render AgentX
 
 Use when feeding an agentx-style registry (repo-first agent directory). Exports every archive paper with a github.com `codeUrl` as an agentx snapshot-shaped candidate agent (slug/name/repo/paperMeta/category + live metrics when a token is available). The output is a review queue for agentx intake, not a drop-in snapshot.
@@ -341,6 +409,27 @@ awescholar render agentx --archive docs/data.json -o intake.sh --emit commands -
 ```
 
 No category list is hardcoded: when `--exclude-snapshot` points at an agentx snapshot, the categories actually present in that file are the source of truth — mapped or default slugs missing from it draw a warning (no snapshot means no validation). `--source`/`--source-url` record provenance on every exported agent. Run `updater enrich` first so papers carry their repos and stars. `--emit commands` writes one `pnpm agent:add owner/repo --category … --name … --paper …` line per candidate — tags are deliberately not emitted (the tag registry belongs to the target repo, whose agent:add validates at run time). `--llm-category` prefers the paper's system name for display and asks the annotator model for a category slug that exists in the target snapshot.
+
+### Hub Maintenance Cycle (AgentX registry)
+
+Use when refreshing the AgentX hub — e.g. after new papers are curated, or on a scheduled CI run.
+
+```bash
+# 1. Project new paper archive entries as agent candidates
+awescholar render agentx --archive docs/data.json -o candidates.json
+
+# 2. Ingest candidates (all-or-nothing; validates category/tag policy, derives status)
+awescholar updater add --agentx --from-json candidates.json
+
+# 3. Refresh GitHub metrics + run lifecycle pass (404 → gone, retirement, license fallback)
+awescholar updater enrich --agentx
+
+# 4. Validate snapshot invariants (CI gate — exits non-zero with itemized problems if any)
+awescholar verify --agentx
+
+# 5. Commit the updated snapshot
+git add data/agents-snapshot.json && git commit -m "chore: refresh agentx snapshot"
+```
 
 ## Response Format (reader intents)
 
