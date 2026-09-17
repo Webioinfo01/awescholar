@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.2.5 - 2026-09-17
+
+### Features
+- Single-paper curation: `updater search` now writes DOI-first `paperUrl`, new `--code-url owner/repo` and `--annotate` flags for direct repo annotation with one LLM batch call; `--only` repeatable scoping on `updater enrich`, `updater backfill`, and citation fills; new `archive.stars_style` config (`numeric` or `badge`); agentx `--emit commands` now writes an executable `pnpm agent:add` script instead of candidate JSON
+- Monthly-report workflow: `crawler run --month YYYY-MM` derives dates, output dir (`month_reports/YYMM`), and report name from one argument; `render digest --month` summarizes a month straight from the archive with LLM narrative or `--no-llm` structured tables; report filenames no longer embed model names; filter gates on scope before venue prestige with `filter.limit` as an upper bound
+- `updater publish-scan --archive`: checks every archived preprint against Semantic Scholar (DOI → fuzzy S2 title search → Crossref) and queues version-of-record metadata into `publish_review.json`; `--apply` upgrades venue/DOI/paperUrl/year/authors/citations in place; preprint detection now covers bioRxiv/medRxiv, Research Square, Preprints.org, ChemRxiv, Authorea, and SSRN (not just arXiv)
+- Agentx: candidates now named from the paper's system name; new `--llm-category` flag uses configured LLM to derive agent category names
+
+### Refactor
+- CLI regroup: `render` group holds all artifact-derivation commands (`render readme`, `render counts`, `render rss`, `render digest`, `render agentx`); `updater citations` folds into `updater backfill --fields citations`; `updater` retains only archive-data lifecycle (search, add, update, dedupe, enrich, backfill) — 12 subcommands reduced to 6
+- Breaking: the old names `updater readme`, `updater counts`, `updater rss`, `updater digest`, `updater export-agentx`, and `updater citations` are gone without aliases; switch scripts to `render` names or `backfill --fields citations`
+
+### Fixes
+- Dedupe now holds back author-roster-overlap and `codeUrl`-collision pairs for review, not only title similarity; new records stamp `addedAt`; `updater enrich --since YYYY-MM-DD` scopes to entries added on/after that date; `updater publish-scan --pair PREPRINT PUBLISHED` queues manual preprint→published upgrades for retitled twins; `retry_with_backoff` wraps network, LLM, and Semantic Scholar calls for transient-failure resilience
+- Archive backups skip timestamped copies when the target file is git-clean; half-month period support via `crawler run --period`
+
+
 ## Unreleased
 
 CLI regrouped by first principles — every command that only derives artifacts from the project data JSON moves from `updater` to a new `render` group, and citation backfill folds into `updater backfill`; `updater` is now purely the archive-data lifecycle (12 subcommands → 6).
