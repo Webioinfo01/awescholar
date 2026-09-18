@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from awescholar.agentx import papers_fill
-from awescholar.agentx.papers_fill import enrich_papers, refresh_citations
+from awescholar.agentx.papers_fill import enrich_papers, refresh_citations, sync_venue_tags
 
 # --- Fixtures -----------------------------------------------------------------
 
@@ -381,6 +381,50 @@ def test_enrich_writes_snapshot_even_when_nothing_resolves(tmp_path, monkeypatch
 
     assert stats["enriched"] == 0 and stats["misses"] == ["delta-agent"]
     assert writes == [path]
+
+
+# --- sync_venue_tags ----------------------------------------------------------
+
+
+def test_sync_venue_tags_adds_canonical_registered_venue_and_is_idempotent(tmp_path):
+    path = _snapshot_file(
+        tmp_path,
+        [
+            _agent("nature-agent", tags=["Stanford"], paperMeta=_meta("", "Nature paper", 1)),
+            _agent("alias-agent", paperMeta={**_meta("", "BME paper", 1), "venue": "Nature Biomedical Engineering"}),
+            _agent("unknown-agent", paperMeta={**_meta("", "Unknown paper", 1), "venue": "NEJM AI"}),
+        ],
+    )
+    by_slug = _by_slug(path)
+    by_slug["nature-agent"]["paperMeta"]["venue"] = "Nature"
+    Path(path).write_text(json.dumps({"agents": list(by_slug.values()), "counts": {"total": 3}}))
+
+    first = sync_venue_tags(path)
+    assert first == {"updated": 2, "unknown_venues_skipped": 1}
+    agents = _by_slug(path)
+    assert agents["nature-agent"]["tags"] == ["Stanford", "Nature"]
+    assert agents["alias-agent"]["tags"] == ["Nature-BME"]
+    assert agents["unknown-agent"]["tags"] == []
+
+    second = sync_venue_tags(path)
+    assert second == {"updated": 0, "unknown_venues_skipped": 1}
+
+
+def test_sync_venue_tags_respects_only(tmp_path):
+    path = _snapshot_file(
+        tmp_path,
+        [
+            _agent("alpha-agent", paperMeta={**_meta("", "Alpha", 1), "venue": "Nature"}),
+            _agent("beta-agent", paperMeta={**_meta("", "Beta", 1), "venue": "Nature"}),
+        ],
+    )
+
+    result = sync_venue_tags(path, only=["BETA"])
+
+    assert result["updated"] == 1
+    agents = _by_slug(path)
+    assert agents["alpha-agent"]["tags"] == []
+    assert agents["beta-agent"]["tags"] == ["Nature"]
 
 
 # --- refresh_citations --------------------------------------------------------

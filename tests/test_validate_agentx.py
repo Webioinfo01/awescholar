@@ -94,9 +94,10 @@ def test_enforces_the_tag_policy_and_the_registry():
     file = _fixture()
     file["agents"][0]["tags"] = ["multi-agent", "Not-Registered"]
     problems = validate.validate_snapshot_file(file)
-    assert len(problems) == 2
+    assert len(problems) == 3
     assert "multi-agent — generic descriptor" in problems[0]
     assert "unregistered tag(s) multi-agent, Not-Registered" in problems[1]
+    assert "paperMeta.venue maps to registered tag Nature" in problems[2]
 
 
 def test_requires_canonical_github_url():
@@ -132,6 +133,25 @@ def test_keeps_graveyard_metadata_on_graveyard_records_only():
 def test_allows_null_citations_for_unindexed_papers():
     file = _fixture()
     file["agents"][0]["paperMeta"]["citations"] = None
+    assert validate.validate_snapshot_file(file) == []
+
+
+def test_requires_registered_paper_venue_tag():
+    file = _fixture()
+    file["agents"][0]["tags"] = ["Stanford"]
+    assert validate.validate_snapshot_file(file) == [
+        (
+            "agents[0] (alpha-agent): paperMeta.venue maps to registered tag Nature "
+            "but tags does not contain it — run `updater backfill --agentx "
+            "--fields venue-tags`"
+        ),
+    ]
+
+
+def test_unknown_paper_venue_does_not_require_a_tag():
+    file = _fixture()
+    file["agents"][0]["tags"] = ["Stanford"]
+    file["agents"][0]["paperMeta"]["venue"] = "NEJM AI"
     assert validate.validate_snapshot_file(file) == []
 
 

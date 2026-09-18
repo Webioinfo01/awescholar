@@ -48,6 +48,7 @@ from .papers import (
     clue_paper_url,
     extract_paper_clue,
 )
+from .policy import registered_venue_tag
 from .snapshot import read_snapshot, write_snapshot
 
 ARXIV_API_TIMEOUT_SECONDS = 20
@@ -313,6 +314,45 @@ def enrich_papers(
         "skipped": len(agents) - len(pending),
         "misses": misses,
     }
+
+
+def sync_venue_tags(
+    snapshot_file: str,
+    *,
+    only: list[str] | None = None,
+    status_cb=print,
+) -> dict:
+    """Project registered paper venues onto an agent's attribution tags.
+
+    paperMeta.venue remains the source record from the publication database;
+    this local, idempotent pass adds its registered canonical venue tag when
+    absent. Unknown venues and every existing tag are left untouched.
+    """
+    snapshot = read_snapshot(snapshot_file)
+    updated = skipped_unknown = 0
+    for agent in snapshot["agents"]:
+        if only and not _matches_only(agent, only):
+            continue
+        meta = agent.get("paperMeta") or {}
+        venue_tag = registered_venue_tag(str(meta.get("venue") or ""))
+        if venue_tag is None:
+            if str(meta.get("venue") or "").strip():
+                skipped_unknown += 1
+            continue
+        tags = agent.get("tags")
+        if not isinstance(tags, list):
+            continue
+        if venue_tag in tags:
+            continue
+        agent["tags"] = [*tags, venue_tag]
+        updated += 1
+
+    if updated:
+        write_snapshot(snapshot_file, snapshot)
+    status_cb(
+        f"Venue tags synced: updated={updated} unknown-venues-skipped={skipped_unknown}"
+    )
+    return {"updated": updated, "unknown_venues_skipped": skipped_unknown}
 
 
 def refresh_citations(

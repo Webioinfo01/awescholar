@@ -12,7 +12,7 @@ import json
 import re
 from datetime import datetime
 
-from .policy import CATEGORIES, find_tag_policy_violations, tag_type
+from .policy import CATEGORIES, find_tag_policy_violations, registered_venue_tag, tag_type
 
 # resolve_repo_status (transform) can emit every status below; "no-repo"
 # only ever enters through a writer, but it is protected there, so it stays
@@ -194,6 +194,16 @@ def validate_snapshot_file(file: object) -> list[str]:
                     value = paper_meta.get(meta_key)
                     if value is not None and not isinstance(value, str):
                         problems.append(f"{spot}: paperMeta.{meta_key} must be a string")
+                venue_tag = registered_venue_tag(str(paper_meta.get("venue") or ""))
+                tags = agent.get("tags")
+                if not isinstance(tags, list):
+                    tags = []
+                if venue_tag is not None and venue_tag not in tags:
+                    problems.append(
+                        f"{spot}: paperMeta.venue maps to registered tag {venue_tag} "
+                        "but tags does not contain it — run `updater backfill --agentx "
+                        "--fields venue-tags`"
+                    )
 
         retired_reason = agent.get("retiredReason")
         if retired_reason is not None:

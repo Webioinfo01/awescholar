@@ -333,6 +333,8 @@ def test_backfill_agentx_dispatches_paper_meta_and_citations(tmp_path, monkeypat
     calls = []
     monkeypatch.setattr(papers_fill, "enrich_papers",
                         lambda *a, **kw: calls.append(("enrich", kw.get("force"))))
+    monkeypatch.setattr(papers_fill, "sync_venue_tags",
+                        lambda *a, **kw: calls.append(("venue-tags", None)))
     monkeypatch.setattr(papers_fill, "refresh_citations",
                         lambda *a, **kw: calls.append(("refresh", None)))
 
@@ -340,7 +342,12 @@ def test_backfill_agentx_dispatches_paper_meta_and_citations(tmp_path, monkeypat
                               fields=["paper-meta"], only=["bio"], refresh=True,
                               no_backup=True)
     cli.cmd_backfill(args, {"ss_api_key": None})
-    assert calls == [("enrich", True)]
+    assert calls == [("enrich", True), ("venue-tags", None)]
+
+    calls.clear()
+    args.fields = ["venue-tags"]
+    cli.cmd_backfill(args, {"ss_api_key": None})
+    assert calls == [("venue-tags", None)]
 
     calls.clear()
     args.fields = ["citations"]
@@ -351,7 +358,7 @@ def test_backfill_agentx_dispatches_paper_meta_and_citations(tmp_path, monkeypat
     args.fields = None  # default: paper-meta + citations
     args.refresh = False
     cli.cmd_backfill(args, {"ss_api_key": None})
-    assert calls == [("enrich", False), ("refresh", None)]
+    assert calls == [("enrich", False), ("venue-tags", None), ("refresh", None)]
 
 
 def test_backfill_agentx_rejects_affiliation_field(tmp_path, capsys):

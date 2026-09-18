@@ -301,8 +301,9 @@ render agentx → updater add --agentx --from-json → updater enrich --agentx �
 | `agentx add owner/repo --category X --tags A,B` | `awescholar updater add --agentx owner/repo --category X [--tags "A,B"] [--name] [--paper] [--homepage] [--description]` |
 | `agentx add --from-json F` | `awescholar updater add --agentx --from-json F`（批量，all-or-nothing） |
 | `agentx snapshot` | `awescholar updater enrich --agentx [--archive data/agents-snapshot.json]`（指标 + 生命周期：404→gone、状态推导、retirement 冻结、license 回退；`--agentx` 模式下 `--archive` 缺省 `data/agents-snapshot.json`） |
-| `agentx enrich-papers` | `awescholar updater backfill --agentx --fields paper-meta [--refresh] [--only slug 子串]` |
+| `agentx enrich-papers` | `awescholar updater backfill --agentx --fields paper-meta [--refresh] [--only slug 子串]`（同时同步已注册的 venue 标签） |
 | `agentx refresh-citations` | `awescholar updater backfill --agentx --fields citations` |
+| — | `awescholar updater backfill --agentx --fields venue-tags [--only slug 子串]`（将论文 venue 同步为已注册标签） |
 | `agentx validate` | `awescholar verify --agentx`（离线不变量门禁；CI 运行的就是它） |
 
 环境变量：`GITHUB_TOKEN`（建议配置）、`SEMANTIC_SCHOLAR_API_KEY` 或 `SEMANTICSCHOLAR_API_KEY`（backfill 建议配置）。

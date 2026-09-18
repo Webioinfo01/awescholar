@@ -377,7 +377,7 @@ def cmd_search_record(args: argparse.Namespace, config: dict) -> int | None:
 
 def cmd_backfill(args: argparse.Namespace, config: dict) -> int | None:
     if getattr(args, "agentx", False):
-        from .agentx.papers_fill import enrich_papers, refresh_citations
+        from .agentx.papers_fill import enrich_papers, refresh_citations, sync_venue_tags
 
         archive = args.archive or "data/agents-snapshot.json"
         fields = args.fields or ["paper-meta", "citations"]
@@ -388,6 +388,8 @@ def cmd_backfill(args: argparse.Namespace, config: dict) -> int | None:
         if "paper-meta" in fields:
             enrich_papers(archive, force=bool(getattr(args, "refresh", False)),
                           only=args.only, ss_api_key=config["ss_api_key"])
+        if "paper-meta" in fields or "venue-tags" in fields:
+            sync_venue_tags(archive, only=args.only)
         if "citations" in fields:
             # Citation counts always refresh — null means "not indexed", not "empty".
             refresh_citations(archive, ss_api_key=config["ss_api_key"])
@@ -400,6 +402,9 @@ def cmd_backfill(args: argparse.Namespace, config: dict) -> int | None:
               "AgentX snapshot)", file=sys.stderr)
         return 1
     fields = args.fields or ["affiliation", "citations"]
+    if "venue-tags" in fields:
+        print("Error: --fields venue-tags is AgentX-only; pass --agentx.", file=sys.stderr)
+        return 1
     if "affiliation" in fields:
         backfill_affiliations(
             archive_path=args.archive, api_key=config["ss_api_key"],
@@ -837,12 +842,14 @@ def main() -> int:
     p.add_argument("--archive", type=str,
                    help="Path to project data JSON; with --agentx, the AgentX "
                         "snapshot (default: data/agents-snapshot.json)")
-    p.add_argument("--fields", action="append", choices=["affiliation", "citations", "paper-meta"],
+    p.add_argument("--fields", action="append",
+                   choices=["affiliation", "citations", "paper-meta", "venue-tags"],
                    metavar="FIELD",
                    help="Fill only these fields (repeatable): affiliation = affiliation+team, "
                         "citations = citation counts (default: both). With --agentx: "
-                        "paper-meta = resolve paperMeta from paper clues, citations = "
-                        "refresh citation counts (default: paper-meta + citations)")
+                        "paper-meta = resolve paperMeta and its registered venue tag from paper clues, "
+                        "venue-tags = sync registered paper venues into tags, citations = refresh citation "
+                        "counts (default: paper-meta + citations)")
     p.add_argument("--only", action="append",
                    help="Scope to entries whose DOI equals this or whose title contains it "
                         "(repeatable; with --agentx, slug/name/repo/paper-meta title·DOI "

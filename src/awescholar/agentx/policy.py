@@ -321,6 +321,12 @@ def canonical_venue(venue: str) -> str:
     return _VENUE_FOLD.get(_canonical_fold(venue.strip()), venue)
 
 
+def registered_venue_tag(venue: str) -> str | None:
+    """Registered venue tag for a paper venue, or None when it is unknown."""
+    tag = canonical_venue(venue)
+    return tag if tag_type(tag) == "venue" else None
+
+
 def registered_tags() -> list[str]:
     """Registry contents, for tests that keep data and registry in sync."""
     return list(TAG_TYPE.keys())
