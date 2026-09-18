@@ -28,7 +28,7 @@
 
 awescholar 用一套工具服务两种项目取向 — **论文取向的 awesome 列表**（data.json 存档：crawler → updater → render → reader）和**项目取向的 AgentX 集线器**（data/agents-snapshot.json 快照：updater --agentx 命令 + verify）。同一个实体既是一条论文记录，也是一条 agent 记录；`render agentx` 负责两者之间的投影。
 
-> **弃用通知：** 独立的 `agentx-cli`（npm `agentx-hub-cli`）自 awescholar 0.2.6 起弃用，其全部命令已并入本工具。
+> **说明：** 独立的 `agentx-cli`（npm `agentx-hub-cli`）已于 awescholar 0.2.6 并入本工具。自 v0.3.0 起本包同时安装 `agentx` 命令 —— 同一批命令的短别名：`agentx add | enrich | backfill | validate`。
 
 ## awescholar 驱动的项目
 
@@ -291,7 +291,16 @@ awescholar reader stats --archive data.json --category "AI Agents"   # 单分类
 典型的 hub 维护流程：
 
 ```text
-render agentx → updater add --agentx --from-json → updater enrich --agentx → verify --agentx → commit
+render agentx → agentx add --from-json → agentx enrich → agentx validate → commit
+```
+
+自 v0.3.0 起，本包在 `awescholar` 之外同时安装 `agentx` 命令 —— 下面各 AgentX 模式的纯别名，底层命令的全部旗标原样继承：
+
+```bash
+agentx add owner/repo --category <slug> [--tags "A,B"] [--paper URL]   # == awescholar updater add --agentx …
+agentx enrich                                                          # == awescholar updater enrich --agentx
+agentx backfill [--fields paper-meta,venue-tags,citations]             # == awescholar updater backfill --agentx
+agentx validate                                                        # == awescholar verify --agentx
 ```
 
 命令映射（旧 `agentx-cli` → 新 `awescholar`）：
