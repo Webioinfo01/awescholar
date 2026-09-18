@@ -707,12 +707,12 @@ def cmd_counts(args: argparse.Namespace, config: dict) -> int | None:
 
 # ── Main ─────────────────────────────────────────────────────
 
-def main() -> int:
+def main(argv: list[str] | None = None, prog: str = "awescholar") -> int:
     parser = argparse.ArgumentParser(
-        prog="awescholar",
+        prog=prog,
         description="Automated scientific literature discovery and curation.",
     )
-    parser.add_argument("-v", "--version", action="version", version=f"awescholar {get_version()}")
+    parser.add_argument("-v", "--version", action="version", version=f"{prog} {get_version()}")
     parser.add_argument("--config", type=str, help="Path to config.json")
     parser.add_argument("--ss-api-key", type=str,
                         help="Semantic Scholar API key (overrides config.json and environment)")
@@ -1000,7 +1000,7 @@ def main() -> int:
                    help="Local preview port (default: 8000; auto-increments while busy)")
     p.add_argument("--force", action="store_true", help="Proceed even if the target directory is not empty")
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if not args.command:
         parser.print_help()
         return 0

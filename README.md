@@ -28,7 +28,7 @@ A lightweight CLI that automates the paper curation workflow: query Semantic Sch
 
 awescholar now serves two orientations with one tool — **paper-oriented awesome lists** (data.json archive: crawler → updater → render → reader) and the **project-oriented AgentX hub** (data/agents-snapshot.json snapshot: updater --agentx commands + verify). The same entity is both a paper record and an agent record; `render agentx` bridges them.
 
-> **Deprecation notice:** the standalone `agentx-cli` (npm `agentx-hub-cli`) is deprecated as of awescholar 0.2.6. All its commands now live here.
+> **Note:** the standalone `agentx-cli` (npm `agentx-hub-cli`) was deprecated and absorbed into awescholar 0.2.6. Since v0.3.0 the package also installs an `agentx` console script — short aliases over the same commands: `agentx add | enrich | backfill | validate`.
 
 ## Powered by awescholar
 
@@ -290,7 +290,16 @@ awescholar reader stats --archive data.json --category "AI Agents"   # Stats for
 The typical hub workflow:
 
 ```text
-render agentx → updater add --agentx --from-json → updater enrich --agentx → verify --agentx → commit
+render agentx → agentx add --from-json → agentx enrich → agentx validate → commit
+```
+
+Since v0.3.0 the package installs an `agentx` console script next to `awescholar` — pure aliases over the AgentX modes below; every flag of the underlying command is inherited:
+
+```bash
+agentx add owner/repo --category <slug> [--tags "A,B"] [--paper URL]   # == awescholar updater add --agentx …
+agentx enrich                                                          # == awescholar updater enrich --agentx
+agentx backfill [--fields paper-meta,venue-tags,citations]             # == awescholar updater backfill --agentx
+agentx validate                                                        # == awescholar verify --agentx
 ```
 
 Command mapping (old `agentx-cli` → new `awescholar`):

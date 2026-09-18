@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.3.0 - 2026-09-18
+
+### Features
+
+- New `agentx` console script, installed alongside `awescholar`: `agentx add | enrich | backfill | validate` are short aliases over the AgentX modes of the existing subcommands (`updater add/enrich/backfill --agentx`, `verify --agentx`). A pure argv rewrite — every flag, default and validation is inherited, nothing re-implemented; the old npm `agentx-hub-cli` surface maps 1:1 except `snapshot` → `enrich` and `enrich-papers`/`refresh-citations` → `backfill` fields.
+- `cli.main` now accepts optional `argv` and `prog` arguments (console-script behavior unchanged); the alias passes `prog="agentx"` so help and `-v` output carry the invoked name.
+
 ## v0.2.9 - 2026-09-18
 
 ### Fixes
