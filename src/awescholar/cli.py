@@ -845,7 +845,8 @@ def main() -> int:
                         "refresh citation counts (default: paper-meta + citations)")
     p.add_argument("--only", action="append",
                    help="Scope to entries whose DOI equals this or whose title contains it "
-                        "(repeatable; with --agentx, slugs containing it instead)")
+                        "(repeatable; with --agentx, slug/name/repo/paper-meta title·DOI "
+                        "containing it instead)")
     p.add_argument("--agentx", action="store_true",
                    help="Backfill an AgentX snapshot instead of a paper archive")
     p.add_argument("--refresh", action="store_true",

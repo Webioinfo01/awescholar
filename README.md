@@ -300,7 +300,7 @@ Command mapping (old `agentx-cli` → new `awescholar`):
 | `agentx add owner/repo --category X --tags A,B` | `awescholar updater add --agentx owner/repo --category X [--tags "A,B"] [--name] [--paper] [--homepage] [--description]` |
 | `agentx add --from-json F` | `awescholar updater add --agentx --from-json F` (batch, all-or-nothing) |
 | `agentx snapshot` | `awescholar updater enrich --agentx [--archive data/agents-snapshot.json]` (metrics + lifecycle: 404→gone, status re-derivation, retirement freeze, license fallback; `--archive` defaults to `data/agents-snapshot.json` in `--agentx` mode) |
-| `agentx enrich-papers` | `awescholar updater backfill --agentx --fields paper-meta [--refresh] [--only slug-substring]` |
+| `agentx enrich-papers` | `awescholar updater backfill --agentx --fields paper-meta [--refresh] [--only substring]` |
 | `agentx refresh-citations` | `awescholar updater backfill --agentx --fields citations` |
 | `agentx validate` | `awescholar verify --agentx` (offline invariants gate; CI runs this) |
 

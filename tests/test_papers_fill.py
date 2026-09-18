@@ -313,6 +313,29 @@ def test_enrich_only_scopes_to_matching_slugs(tmp_path, monkeypatch):
     assert by_slug["beta-agent"]["paperMeta"]["title"] == "Scoped Meta"
 
 
+def test_enrich_only_matches_case_insensitively_across_fields(tmp_path, monkeypatch):
+    """--only scopes beyond the slug — name, repo, paperMeta — case-insensitively.
+
+    Regression: slug-only matching selected nothing for "Paper2Agent" because
+    the slug is lowercase.
+    """
+    monkeypatch.setattr(papers_fill, "search_by_doi", lambda doi, sch: None)
+    monkeypatch.setattr(papers_fill, "search_by_title", lambda q, sch: None)
+    path = _snapshot_file(
+        tmp_path,
+        [
+            _agent("paper2agent", paper="https://doi.org/10.1/p2a"),  # name "Paper2Agent"
+            _agent("other-agent", repo="example/Paper2Agent-clone", paper="https://doi.org/10.1/oth"),
+            _agent("unrelated-agent", paper="https://doi.org/10.1/unrel"),
+        ],
+    )
+
+    stats = enrich_papers(path, only=["Paper2Agent"])
+
+    assert stats["enriched"] == 0 and stats["skipped"] == 1
+    assert stats["misses"] == ["paper2agent", "other-agent"]
+
+
 def test_enrich_excludes_archived_and_gone(tmp_path, monkeypatch):
     monkeypatch.setattr(papers_fill, "search_by_doi", _must_not_call("search_by_doi"))
     path = _snapshot_file(

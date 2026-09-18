@@ -4,15 +4,17 @@ the Python ports of agentx-cli's `enrich-papers` and `refresh-citations`.
 `enrich_papers` resolves a paper record for every agent that carries a
 precise paper clue — a DOI or arXiv ID in its paper/homepage URL, an arXiv
 mention or verbatim quoted title in its description — through Semantic
-Scholar and stores the record as `paperMeta`. Agents whose only clue is an
+Scholar (Crossref backstops DOIs S2 has not indexed yet) and stores the
+record as `paperMeta`. Agents whose only clue is an
 arXiv ID whose DataCite DOI is not indexed fall back to resolving the title
 via the arXiv API and re-querying by title.
 
 Fills a missing `paper` link from the clue's canonical URL; an existing link
 is never overwritten. Agents that already have `paperMeta` are skipped, so
 re-runs only retry the misses (`force=True` re-enriches all). `only` scopes
-the run to slugs containing a given substring (mirroring awescholar's
---only) — for adding one record without churning the rest.
+the run to agents whose slug, name, repo, or paperMeta title/DOI contains a
+given substring (case-insensitive) — for adding one record without churning
+the rest.
 
 `refresh_citations` refreshes the `citations` field (Semantic Scholar
 citationCount) on every agent that already has a `paperMeta` record. Nothing
@@ -113,6 +115,22 @@ def _add_query(queries: dict[str, dict], value: str, slug: str, strict: bool) ->
         queries[value] = {"slugs": [slug], "strict": strict}
 
 
+def _matches_only(agent: dict, only: list[str]) -> bool:
+    """Case-insensitive --only scope: slug, name, repo, or paperMeta title/DOI.
+
+    Slugs are lowercase while display names are not, so "Paper2Agent" must
+    still find slug "paper2agent" — slug-only matching silently selected
+    nothing for mixed-case patterns.
+    """
+    if not only:
+        return True
+    meta = agent.get("paperMeta") or {}
+    fields = [agent.get(k) or "" for k in ("slug", "name", "repo")]
+    fields += [meta.get(k) or "" for k in ("title", "doi")]
+    hay = " ".join(str(f) for f in fields).lower()
+    return any(o.lower() in hay for o in only)
+
+
 def enrich_papers(
     snapshot_file: str,
     *,
@@ -123,11 +141,11 @@ def enrich_papers(
 ) -> dict:
     """Fill paperMeta from Semantic Scholar for every agent with a precise clue.
 
-    Skips agents that already have paperMeta unless ``force``; scopes to slugs
-    containing one of ``only``'s substrings when given. Always rewrites the
-    snapshot at the end (even with nothing enriched), matching the TypeScript
-    command. Returns {"enriched", "filled_link", "unresolved", "skipped",
-    "misses"}.
+    Skips agents that already have paperMeta unless ``force``; scopes to
+    agents matching ``only`` (see :func:`_matches_only`) when given. Always
+    rewrites the snapshot at the end (even with nothing enriched), matching
+    the TypeScript command. Returns {"enriched", "filled_link", "unresolved",
+    "skipped", "misses"}.
     """
     snapshot = read_snapshot(snapshot_file)
     agents = snapshot["agents"]
@@ -137,7 +155,7 @@ def enrich_papers(
         if (force or not a.get("paperMeta"))
         and a.get("status") != "archived"
         and a.get("status") != "gone"
-        and (not only or any(o in a["slug"] for o in only))
+        and (not only or _matches_only(a, only))
     ]
     clues: dict[str, PaperClue] = {}
     no_clue = 0
@@ -285,7 +303,8 @@ def enrich_papers(
     if misses:
         status_cb(f"Unresolved (re-run retries these): {', '.join(misses)}")
         status_cb(
-            "Persistent misses are usually anonymous rate limits — set SEMANTICSCHOLAR_API_KEY."
+            "Persistent misses are usually papers Semantic Scholar has not indexed — "
+            "set SEMANTICSCHOLAR_API_KEY to rule out rate limits."
         )
     return {
         "enriched": enriched,
@@ -393,6 +412,7 @@ def refresh_citations(
     if misses:
         status_cb(f"Unresolved (kept previous value): {', '.join(misses)}")
         status_cb(
-            "Persistent misses are usually anonymous rate limits — set SEMANTICSCHOLAR_API_KEY."
+            "Persistent misses are usually papers Semantic Scholar has not indexed — "
+            "set SEMANTICSCHOLAR_API_KEY to rule out rate limits."
         )
     return {"updated": updated, "unchanged": unchanged, "unresolved": len(misses), "misses": misses}
