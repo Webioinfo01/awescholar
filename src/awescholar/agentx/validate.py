@@ -216,15 +216,16 @@ def validate_snapshot_file(file: object) -> list[str]:
             problems.append(f"{spot}: sourceUrl must be null or an http(s) URL")
 
     # writeSnapshot sorts by slug so diffs stay deterministic — a file that
-    # drifted out of order was not written by the pipeline. The message keeps
-    # the TypeScript wording; codepoint order matches localeCompare on this
-    # registry's ASCII slugs (locked against the real file in tests).
+    # drifted out of order was not written by the pipeline. Codepoint order
+    # (`sorted`), not localeCompare: the two collations disagree on
+    # digit-vs-underscore slugs (paper2agent vs paper_claw-pigeondan1), and
+    # the TypeScript writer/validator sort by codepoint for the same reason.
     slugs = [
         a["slug"] for a in agents if isinstance(a, dict) and isinstance(a.get("slug"), str)
     ]
     if any(s != t for s, t in zip(slugs, sorted(slugs))):
         problems.append(
-            "agents are not in stable slug order (writeSnapshot sorts by slug.localeCompare)"
+            "agents are not in stable slug order (writeSnapshot sorts by slug codepoint order)"
         )
 
     return problems

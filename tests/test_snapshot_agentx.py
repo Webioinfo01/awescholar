@@ -1,5 +1,6 @@
 """Port of agentx-cli snapshot.test.ts + slug.test.ts, plus a lock on the
-real registry: Python `sorted` matches the TS writer's `localeCompare` order.
+real registry: the stored slug order matches Python `sorted` codepoint order
+(the TS writer sorts the same way — see test_registry_stored_order_matches_python_sorted).
 """
 
 import copy
@@ -65,8 +66,8 @@ FIXTURE = {
     "counts": {"total": 2, "gone": 0},
 }
 
-# The live AgentX registry written by the TypeScript CLI; used to lock the
-# sorted()-vs-localeCompare equivalence against real data.
+# The live AgentX registry; used to lock the stored slug order against
+# Python `sorted` codepoint order.
 REGISTRY = "/Users/peng/Desktop/Project/phd/agentx/website/data/agents-snapshot.json"
 
 
@@ -108,11 +109,12 @@ def test_round_trips_a_file_written_in_stable_slug_order(tmp_path):
 
 
 def test_registry_stored_order_matches_python_sorted():
-    """Locks write_snapshot's `sorted` against the TS `localeCompare` order.
+    """Locks write_snapshot's `sorted` against the TS writer's order.
 
-    The TypeScript writer sorts with `a.slug.localeCompare(b.slug)` (ICU
-    collation); this Python port sorts by codepoint. Verified identical on
-    the real registry, whose slugs are ASCII lowercase/digits/"-"/"_".
+    Both sides sort by codepoint. They were aligned after ICU localeCompare
+    disagreed with `sorted` on digit-vs-underscore slugs — the real registry
+    carries paper2agent and paper_claw-pigeondan1, whose relative order the
+    two collations flip, so this lock is no longer vacuous.
     """
     stored = _load_registry()
     slugs = [a["slug"] for a in stored["agents"]]

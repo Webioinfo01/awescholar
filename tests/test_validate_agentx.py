@@ -114,7 +114,7 @@ def test_requires_stable_slug_order():
     file = _fixture()
     file["agents"] = list(reversed(file["agents"]))
     assert validate.validate_snapshot_file(file) == [
-        "agents are not in stable slug order (writeSnapshot sorts by slug.localeCompare)",
+        "agents are not in stable slug order (writeSnapshot sorts by slug codepoint order)",
     ]
 
 

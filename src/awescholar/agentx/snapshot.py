@@ -30,8 +30,8 @@ def write_snapshot(snapshot_file: str, file: dict) -> None:
     Stable slug order => deterministic diffs, and the daily workflow only
     commits when data actually changed; the file intentionally carries NO
     timestamp for the same reason. Slugs sort in plain codepoint order
-    (`sorted`), which matches the TypeScript writer's `localeCompare` on this
-    registry's ASCII slugs — locked against the real file in tests.
+    (`sorted`) — the TypeScript writer uses the same comparator, aligned
+    after ICU localeCompare disagreed on digit-vs-underscore slugs.
     """
     file["agents"] = sorted(file["agents"], key=lambda a: a["slug"])
     file["counts"]["total"] = len(file["agents"])
