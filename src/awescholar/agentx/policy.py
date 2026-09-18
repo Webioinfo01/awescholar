@@ -34,6 +34,7 @@ CATEGORIES: dict[str, str] = {
     "platforms": "Platforms & Infrastructure",
     "orchestration": "Multi-Agent Orchestration",
     "benchmarks": "Benchmarks",
+    "datasets": "Datasets",
     "safety-security": "Safety & Security",
     "others": "Others",
 }

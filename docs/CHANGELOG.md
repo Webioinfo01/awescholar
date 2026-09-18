@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.2.8 - 2026-09-18
+
+### Features
+
+- New primary AgentX category `datasets` ("Datasets") — for registry entries whose deliverable is the data itself, hosted off-GitHub (HuggingFace datasets, portals) and registered via the existing `no-repo` shape; slots between `benchmarks` and `safety-security` in `CATEGORY_ORDER`. First entry: Tahoe-100M.
+
 ## v0.2.7 - 2026-09-18
 
 ### Features
