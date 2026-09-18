@@ -69,7 +69,7 @@ def test_is_duplicate(existing, new, expected):
 
 # ── search_and_add with json_file ──────────────────────────────
 
-def _mock_paper(title="Test Paper", doi="10.1/test"):
+def _mock_paper(title="Test Paper", doi="10.1/test", arxiv=""):
     """Create a mock SemanticScholar paper object."""
     paper = MagicMock()
     paper.title = title
@@ -81,6 +81,8 @@ def _mock_paper(title="Test Paper", doi="10.1/test"):
     paper.venue = "TestVenue"
     paper.paperId = "abc123"
     paper.externalIds = {"DOI": doi}
+    if arxiv:
+        paper.externalIds["ArXiv"] = arxiv
     paper.url = "https://example.com/paper"
     paper.journal = None
     paper.year = 2025
@@ -297,6 +299,43 @@ def test_paper_url_falls_back_to_s2_url_when_no_doi(MockSS):
         with open(json_file) as f:
             papers = json.load(f)
         assert papers[0]["paperUrl"] == paper.url
+
+
+@patch("awescholar.record.SemanticScholar")
+def test_arxiv_preprint_derives_doi_and_venue(MockSS):
+    """A fresh preprint with an S2-lagged record (no DOI, no venue) still gets
+    the deterministic DataCite DOI and the arXiv venue."""
+    mock_client = MagicMock()
+    MockSS.return_value = mock_client
+    paper = _mock_paper(title="Fresh Preprint", doi="", arxiv="2609.11115")
+    paper.venue = ""
+    mock_client.search_paper.return_value = paper
+
+    with tempfile.TemporaryDirectory() as tmp:
+        json_file = os.path.join(tmp, "papers.json")
+        search_and_add(json_file=json_file, by="title", queries=["Fresh Preprint"])
+        with open(json_file) as f:
+            papers = json.load(f)
+        assert papers[0]["doi"] == "10.48550/arXiv.2609.11115"
+        assert papers[0]["venue"] == "arXiv"
+        assert papers[0]["paperUrl"] == "https://doi.org/10.48550/arXiv.2609.11115"
+
+
+@patch("awescholar.record.SemanticScholar")
+def test_arxiv_id_never_overrides_doi_or_venue(MockSS):
+    """A published paper that also lives on arXiv keeps its real DOI and venue."""
+    mock_client = MagicMock()
+    MockSS.return_value = mock_client
+    paper = _mock_paper(title="Published Paper", doi="10.1/real", arxiv="2401.00001")
+    mock_client.search_paper.return_value = paper
+
+    with tempfile.TemporaryDirectory() as tmp:
+        json_file = os.path.join(tmp, "papers.json")
+        search_and_add(json_file=json_file, by="title", queries=["Published Paper"])
+        with open(json_file) as f:
+            papers = json.load(f)
+        assert papers[0]["doi"] == "10.1/real"
+        assert papers[0]["venue"] == "TestVenue"
 
 
 # ── code_url / stars_style ────────────────────────────────────

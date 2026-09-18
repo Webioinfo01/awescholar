@@ -13,6 +13,7 @@ AgentX absorption release — the standalone agentx-cli (TypeScript) is fully re
 - New top-level `verify --agentx` replaces `agentx validate`: the offline writer-invariants gate (CI runs exactly this), exit 1 with an itemized problem list on any violation
 - `render agentx` unchanged in behavior; its output now documents the new intake command
 - `agentx_slugify` is now Unicode-aware, matching the former TypeScript slugify (CJK and accented names slug identically on both sides); newly exported slugs with non-ASCII names may differ from previous ASCII-only exports
+- S2 records for fresh arXiv preprints (empty DOI and venue) now derive both from the `externalIds.ArXiv` ID — `doi = 10.48550/arXiv.<id>` (DataCite mints one for every arXiv paper) and `venue = arXiv` — in every search/backfill projection, both orientations; existing DOI/venue values are never overridden
 - Breaking: the `agentx` npm binary is deprecated — replace `agentx add|snapshot|enrich-papers|refresh-citations|validate` with the awescholar commands above; `--archive` defaults to `data/agents-snapshot.json` in `--agentx` mode
 
 ## v0.2.5 - 2026-09-17

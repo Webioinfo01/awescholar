@@ -56,12 +56,23 @@ def _paper_to_record(paper) -> dict | None:
 
     ext_ids = getattr(paper, "externalIds", None) or {}
     doi = ext_ids.get("DOI", "")
+    arxiv_id = ext_ids.get("ArXiv", "")
 
     venue = getattr(paper, "venue", None) or ""
     if not venue:
         journal = getattr(paper, "journal", None)
         if journal and hasattr(journal, "name"):
             venue = journal.name or ""
+
+    # Fresh preprints lag in S2 metadata: empty venue and DOI long after
+    # indexing. The ArXiv external ID is present from day one and every arXiv
+    # paper carries a DataCite DOI, so both fields are derived here instead of
+    # persisting empty and waiting for a later backfill to heal.
+    if arxiv_id:
+        if not doi:
+            doi = f"10.48550/arXiv.{arxiv_id}"
+        if not venue:
+            venue = "arXiv"
 
     # DOI links are canonical; S2 page URL is the last resort, never the first choice.
     if doi:
