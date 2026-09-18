@@ -3,6 +3,7 @@
 import json
 import os
 import sqlite3
+import urllib.request
 from pathlib import Path
 
 from semanticscholar import SemanticScholar
@@ -20,6 +21,10 @@ FIELDS = [
     "year", "title", "team", "team website", "affiliation",
     "domain", "venue", "paperUrl", "codeUrl", "githubStars",
 ]
+
+CROSSREF_TIMEOUT_SECONDS = 15
+CROSSREF_URL = "https://api.crossref.org/works/{doi}"
+CROSSREF_UA = "awescholar (https://github.com/wehuman01/awescholar)"
 
 
 def _get_client(api_key: str | None = None) -> SemanticScholar:
@@ -180,6 +185,58 @@ def _local_doi_record(doi: str, found: dict) -> dict:
     }
 
 
+def _crossref_doi_record(doi: str) -> dict | None:
+    """Fetch a work from Crossref and shape it like an S2 record.
+
+    Publisher-deposited metadata lands in Crossref within days of
+    publication, long before Semantic Scholar indexes the paper, so this
+    rescues brand-new DOIs that S2 answers 404 for. Returns None when the
+    DOI is unknown to Crossref (e.g. DataCite-registered arXiv DOIs) or the
+    request fails — a missing record is a normal outcome, not an error.
+    """
+    req = urllib.request.Request(
+        CROSSREF_URL.format(doi=doi),
+        headers={"User-Agent": CROSSREF_UA},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=CROSSREF_TIMEOUT_SECONDS) as resp:
+            msg = json.load(resp)["message"]
+    except Exception:  # noqa: BLE001 — unknown DOIs and transient failures are normal outcomes
+        return None
+    title = next((t for t in msg.get("title") or []), "")
+    if not title:
+        return None
+    authors = [
+        " ".join(x for x in (a.get("given"), a.get("family")) if x).strip()
+        for a in msg.get("author") or []
+    ]
+    authors = [a for a in authors if a]
+    year = ""
+    for field in ("published", "issued"):
+        parts = ((msg.get(field) or {}).get("date-parts") or [[None]])[0]
+        if parts and parts[0]:
+            month = parts[1] if len(parts) > 1 and parts[1] else None
+            year = f"{parts[0]}.{month:02d}" if month else str(parts[0])
+            break
+    doi_norm = msg.get("DOI") or doi
+    return {
+        "year": year,
+        "title": title,
+        "team": authors[-1] if authors else "",
+        "authors": authors,
+        "team website": "",
+        "affiliation": "",
+        "domain": "",
+        "venue": next((v for v in msg.get("container-title") or []), ""),
+        "paperUrl": f"https://doi.org/{doi_norm}",
+        "codeUrl": "",
+        "githubStars": "",
+        "citations": msg.get("is-referenced-by-count"),
+        "doi": doi_norm,
+        "abstract": "",
+    }
+
+
 def search_by_doi(doi: str, sch: SemanticScholar) -> dict | None:
     if not doi.strip():
         return None
@@ -202,7 +259,11 @@ def search_by_doi(doi: str, sch: SemanticScholar) -> dict | None:
     if local:
         print(f"  Resolved from local cache: {local.get('_source')}")
         return _local_doi_record(doi, local)
-    return None
+    print("  Not in the local cache; trying Crossref (new DOIs land there first)...")
+    record = _crossref_doi_record(doi)
+    if record:
+        print(f"  Resolved from Crossref: {record['title'][:60]}")
+    return record
 
 
 def _load_archive(archive_path: str) -> dict | list:

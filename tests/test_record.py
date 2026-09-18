@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from awescholar.record import (
+    _crossref_doi_record,
     _is_duplicate,
     _load_flat_json,
     _normalize_code_url,
@@ -427,3 +428,91 @@ def test_search_by_doi_falls_back_to_local_cache(MockSS, mock_input, tmp_path, m
     assert record["title"] == "Agentomics: an agentic system"
     assert record["paperUrl"] == "https://doi.org/10.64898/2026.01.27.702049"
     assert record["year"] == "2026.01"
+
+
+# ── Crossref fallback ─────────────────────────────────────────
+
+def _crossref_message() -> dict:
+    """A Crossref work message shaped like api.crossref.org/works responses."""
+    return {
+        "message": {
+            "title": ["Reimagining research papers as interactive and reliable AI agents"],
+            "container-title": ["Nature"],
+            "published": {"date-parts": [[2026, 9, 16]]},
+            "author": [
+                {"given": "Jiacheng", "family": "Miao"},
+                {"given": "James", "family": "Zou"},
+            ],
+            "DOI": "10.1038/s41586-026-11044-y",
+            "is-referenced-by-count": 1,
+        }
+    }
+
+
+def test_crossref_shapes_publisher_metadata():
+    """Crossref's work message maps onto the record shape the enrichers expect."""
+    resp = MagicMock()
+    resp.__enter__.return_value = resp
+    resp.read.return_value = json.dumps(_crossref_message()).encode()
+    with patch("awescholar.record.urllib.request.urlopen", return_value=resp):
+        record = _crossref_doi_record("10.1038/s41586-026-11044-y")
+
+    assert record["title"] == "Reimagining research papers as interactive and reliable AI agents"
+    assert record["venue"] == "Nature"
+    assert record["year"] == "2026.09"
+    assert record["authors"] == ["Jiacheng Miao", "James Zou"]
+    assert record["team"] == "James Zou"
+    assert record["citations"] == 1
+    assert record["doi"] == "10.1038/s41586-026-11044-y"
+    assert record["paperUrl"] == "https://doi.org/10.1038/s41586-026-11044-y"
+
+
+def test_crossref_unknown_doi_is_none():
+    """DataCite arXiv DOIs and network failures are quiet misses, not errors."""
+    with patch("awescholar.record.urllib.request.urlopen", side_effect=Exception("404")):
+        assert _crossref_doi_record("10.48550/arXiv.2505.20286") is None
+
+
+@patch("awescholar.record._crossref_doi_record")
+@patch("awescholar.record.SemanticScholar")
+def test_search_by_doi_falls_back_to_crossref(MockSS, mock_crossref, tmp_path, monkeypatch):
+    """SS 404 with no local cache → Crossref's publisher-deposited record."""
+    mock_client = MagicMock()
+    MockSS.return_value = mock_client
+    mock_client.get_paper.side_effect = Exception("404 Not Found")
+    mock_crossref.return_value = {
+        "year": "2026.09",
+        "title": "Brand New Paper",
+        "team": "James Zou",
+        "authors": ["Jiacheng Miao", "James Zou"],
+        "team website": "",
+        "affiliation": "",
+        "domain": "",
+        "venue": "Nature",
+        "paperUrl": "https://doi.org/10.1038/brand-new",
+        "codeUrl": "",
+        "githubStars": "",
+        "citations": 1,
+        "doi": "10.1038/brand-new",
+        "abstract": "",
+    }
+    monkeypatch.chdir(tmp_path)  # no month_reports pipeline output nearby
+
+    record = search_by_doi("10.1038/brand-new", mock_client)
+
+    assert record is not None
+    assert record["title"] == "Brand New Paper"
+    assert record["citations"] == 1
+    mock_crossref.assert_called_once_with("10.1038/brand-new")
+
+
+@patch("awescholar.record._crossref_doi_record", return_value=None)
+@patch("awescholar.record.SemanticScholar")
+def test_search_by_doi_returns_none_when_all_sources_miss(MockSS, _mock_crossref, tmp_path, monkeypatch):
+    """All three sources missing stays None — a miss is a normal outcome."""
+    mock_client = MagicMock()
+    MockSS.return_value = mock_client
+    mock_client.get_paper.side_effect = Exception("404 Not Found")
+    monkeypatch.chdir(tmp_path)
+
+    assert search_by_doi("10.2000/unknown", mock_client) is None
