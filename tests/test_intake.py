@@ -3,6 +3,7 @@ happy path, already-registered error, and 404 error.
 """
 
 import json
+from datetime import UTC, datetime
 
 import pytest
 
@@ -370,6 +371,8 @@ class TestAgentFromIntake:
         assert agent["tags"] == ["Stanford"]
         assert agent["source"] == "manual"
         assert agent["sourceUrl"] is None
+        # Curation date is stamped at intake, date-only UTC.
+        assert agent["listedAt"] == datetime.now(tz=UTC).date().isoformat()
 
     def test_rec_fields_override_github(self, monkeypatch):
         monkeypatch.setattr(

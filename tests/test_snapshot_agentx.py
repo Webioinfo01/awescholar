@@ -189,6 +189,7 @@ def test_merge_keeps_falsy_values_and_curated_metadata():
         "license": "MIT",
         "description": "curated description",
         "retiredReason": "idle",
+        "listedAt": "2026-09-18",
     }
     github = {
         "language": None,
@@ -221,6 +222,8 @@ def test_merge_keeps_falsy_values_and_curated_metadata():
     # Graveyard metadata rides along.
     assert out["retiredReason"] == "idle"
     assert "retiredStars" not in out
+    # Curation date rides along untouched.
+    assert out["listedAt"] == "2026-09-18"
     # TS object literal field order — JSON diffs stay stable.
     assert list(out) == [
         "slug",
@@ -244,7 +247,14 @@ def test_merge_keeps_falsy_values_and_curated_metadata():
         "source",
         "sourceUrl",
         "retiredReason",
+        "listedAt",
     ]
+
+
+def test_merge_omits_listed_at_when_the_record_predates_it():
+    agent = _fixture()["agents"][0]
+    out = snapshot.merge_snapshot_agent(agent, "alpha-agent", None, "active", None)
+    assert "listedAt" not in out
 
 
 def test_merge_without_github_keeps_curated_values():

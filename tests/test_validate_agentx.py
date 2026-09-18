@@ -68,6 +68,19 @@ def test_accepts_the_fixture():
     assert validate.validate_snapshot_file(_fixture()) == []
 
 
+def test_accepts_optional_listed_at_curation_date():
+    fixture = _fixture()
+    fixture["agents"][0]["listedAt"] = "2026-09-19"
+    assert validate.validate_snapshot_file(fixture) == []
+
+
+def test_rejects_malformed_listed_at():
+    fixture = _fixture()
+    fixture["agents"][0]["listedAt"] = "19.09.2026"
+    problems = validate.validate_snapshot_file(fixture)
+    assert any("listedAt" in p for p in problems)
+
+
 def test_rejects_non_objects_and_missing_agents_arrays():
     assert validate.validate_snapshot_file(None) == ["top level is not an object"]
     assert validate.validate_snapshot_file({"counts": {}}) == ["agents is not an array"]

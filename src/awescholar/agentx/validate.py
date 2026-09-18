@@ -225,6 +225,14 @@ def validate_snapshot_file(file: object) -> list[str]:
         if source_url is not None and not _is_http_url(source_url):
             problems.append(f"{spot}: sourceUrl must be null or an http(s) URL")
 
+        # Curation date: date-only ISO string stamped at intake; optional
+        # because records that predate the field carry none.
+        listed_at = agent.get("listedAt")
+        if listed_at is not None and (
+            not isinstance(listed_at, str) or not _iso_parseable(listed_at)
+        ):
+            problems.append(f"{spot}: listedAt is not an ISO date string — {listed_at}")
+
     # writeSnapshot sorts by slug so diffs stay deterministic — a file that
     # drifted out of order was not written by the pipeline. Codepoint order
     # (`sorted`), not localeCompare: the two collations disagree on
