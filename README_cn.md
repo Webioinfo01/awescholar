@@ -42,7 +42,7 @@ Read https://github.com/Webioinfo01/awescholar/blob/main/README.ai.md and follow
 
 Agent 会先安装 `awescholar` CLI，然后在下面两种 awescholar skill 管理方式中选择一种：
 
-1. **通过 [aweskill](https://aweskill.webioinfo.top/)** — 从 GitHub 安装和管理 skill，支持更新、投影和备份。需要 Node.js。由 [aweskill](https://aweskill.webioinfo.top/) 驱动 — AI 编程 Agent 的通用 skill 管理器。
+1. **通过 [aweskill](https://aweskill.wehuman.top/)** — 从 GitHub 安装和管理 skill，支持更新、投影和备份。需要 Node.js。由 [aweskill](https://aweskill.wehuman.top/) 驱动 — AI 编程 Agent 的通用 skill 管理器。
 2. **直接复制** — 将 `SKILL.md` 下载到 agent 的 skill 目录。除 Python 外无需额外依赖，但后续更新需要手动重新复制。
 
 ### pip
@@ -338,7 +338,7 @@ awescholar 是一个不断壮大的 "awesome" 工具家族中的一员 — 围�
 
 ### CLI 工具
 
-- **[aweskill](https://aweskill.webioinfo.top/)** — CLI 优先的技能包管理器，支持 47+ AI 编程 agent。
+- **[aweskill](https://aweskill.wehuman.top/)** — CLI 优先的技能包管理器，支持 47+ AI 编程 agent。
 - **[aweswitch](https://github.com/Webioinfo01/aweswitch)** — Claude Code、Codex、OpenCode 的 agent 配置切换器。
 - **[awerouter](https://github.com/mugpeng/awerouter)** — 智能路由器，用结构信号把请求分给 Flash 或 Pro 模型，减少不必要的模型开销。
 - **[aweshelf](https://github.com/Webioinfo01/aweshelf)** — 收藏、分类、恢复 AI 编程会话，还能搭配 aweswitch 实现保存配置，一键启动。
