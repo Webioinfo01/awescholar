@@ -167,6 +167,7 @@ TAG_TYPE: dict[str, str] = {
     "HUST-BGI": "institution",
     "MIT": "institution",
     "MIT-LAMM": "institution",
+    "Recursion": "institution",
     "Renmin-University": "institution",
     "SNAP-Lab": "institution",
     "Technion": "institution",
