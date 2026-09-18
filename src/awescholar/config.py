@@ -137,6 +137,7 @@ def load_config(path: str | None) -> dict:
         "publication_date": search.get("publication_date"),
         "limit_search": search.get("limit", 100),
         "include_abstracts": search.get("include_abstracts", True),
+        "pubmed": search.get("pubmed", False),
         "limit_filter": filt.get("limit", 20),
         "research_interests": filt.get("research_interests"),
         "db_path": output.get("db_path") or os.getenv("AWESCHOLAR_DB_PATH", "output"),

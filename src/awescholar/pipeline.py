@@ -28,11 +28,13 @@ def run_search(
     limit: int = 100,
     fields_of_study: list[str] | None = None,
     publication_date_or_year: str | None = None,
+    pubmed: bool = False,
     status_cb: StatusCallback = None,
 ) -> list[dict]:
-    """Search Semantic Scholar and save to DB. Returns paper dicts."""
+    """Search Semantic Scholar and optionally PubMed, then save to DB."""
     cb = status_cb or _noop
-    cb(f"Searching Semantic Scholar (limit={limit})...")
+    sources = "Semantic Scholar + PubMed" if pubmed else "Semantic Scholar"
+    cb(f"Searching {sources} (limit={limit})...")
     papers = search_papers(
         query=query,
         db_path=db_path,
@@ -40,6 +42,7 @@ def run_search(
         limit=limit,
         fields_of_study=fields_of_study,
         publication_date_or_year=publication_date_or_year,
+        pubmed=pubmed,
     )
     cb(f"Found {len(papers)} papers.")
     return papers

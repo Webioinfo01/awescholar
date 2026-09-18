@@ -74,6 +74,7 @@ def cmd_search(args: argparse.Namespace, config: dict) -> int | None:
         limit=args.limit or config["limit_search"],
         fields_of_study=config["fields_of_study"],
         publication_date_or_year=args.date or config["publication_date"],
+        pubmed=config["pubmed"],
         status_cb=status,
     )
     print(f"\nSaved {len(papers)} papers to {config['db_path']}/papers.db")

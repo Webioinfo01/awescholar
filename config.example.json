@@ -33,7 +33,8 @@
         "fields_of_study": ["Biology", "Medicine"],
         "publication_date": "2025-12-15:2025-12-31",
         "limit": 100,
-        "include_abstracts": true
+        "include_abstracts": true,
+        "pubmed": false
     },
     "filter": {
         "limit": 20,
