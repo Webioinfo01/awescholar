@@ -5,6 +5,7 @@
 ### Features
 
 - New primary AgentX category `datasets` ("Datasets") — for registry entries whose deliverable is the data itself, hosted off-GitHub (HuggingFace datasets, portals) and registered via the existing `no-repo` shape; slots between `benchmarks` and `safety-security` in `CATEGORY_ORDER`. First entry: Tahoe-100M.
+- Optional PubMed search source for the crawler pipeline: set `search.pubmed: true` to also query NCBI E-utilities and merge normalized PubMed records into the search step (off by default)
 
 ## v0.2.7 - 2026-09-18
 
