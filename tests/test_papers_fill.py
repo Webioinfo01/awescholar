@@ -126,11 +126,14 @@ def test_enrich_doi_clue_writes_paper_meta(tmp_path, monkeypatch):
     assert stats == {
         "enriched": 1,
         "filled_link": 0,
+        "promoted": 1,  # Nature is a journal venue -> auto-stable at any stars
         "unresolved": 0,
         "skipped": 0,
         "misses": [],
     }
-    meta = _by_slug(path)["alpha-agent"]["paperMeta"]
+    agent = _by_slug(path)["alpha-agent"]
+    assert agent["status"] == "stable"
+    meta = agent["paperMeta"]
     assert meta == {
         "title": "Alpha: Agents for Biology",
         "venue": "Nature",
@@ -351,6 +354,7 @@ def test_enrich_excludes_archived_and_gone(tmp_path, monkeypatch):
     assert stats == {
         "enriched": 0,
         "filled_link": 0,
+        "promoted": 0,
         "unresolved": 0,
         "skipped": 2,
         "misses": [],
@@ -381,6 +385,51 @@ def test_enrich_writes_snapshot_even_when_nothing_resolves(tmp_path, monkeypatch
 
     assert stats["enriched"] == 0 and stats["misses"] == ["delta-agent"]
     assert writes == [path]
+
+
+# --- enrich_papers: status re-derivation --------------------------------------
+
+
+def test_enrich_preprint_venue_keeps_low_star_agent_active(tmp_path, monkeypatch):
+    """Only journal/conference venues auto-stable; an arXiv preprint with
+    42 stars stays active — paperMeta lands, status does not move."""
+    monkeypatch.setattr(
+        papers_fill, "search_by_doi", lambda doi, sch: _record("Preprint Tool", doi, venue="arXiv")
+    )
+    path = _snapshot_file(
+        tmp_path, [_agent("preprint-agent", paper="https://doi.org/10.48550/arXiv.2505.1")]
+    )
+
+    stats = enrich_papers(path)
+
+    assert stats["promoted"] == 0
+    agent = _by_slug(path)["preprint-agent"]
+    assert agent["paperMeta"]["venue"] == "arXiv" and agent["status"] == "active"
+
+
+def test_enrich_never_touches_protected_no_repo_status(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        papers_fill,
+        "search_by_doi",
+        lambda doi, sch: _record("Atlas Paper", doi, venue="Cell"),
+    )
+    path = _snapshot_file(
+        tmp_path,
+        [
+            _agent(
+                "atlas-agent",
+                repo="cell.com/atlas",
+                status="no-repo",
+                paper="https://doi.org/10.1/atlas",
+            )
+        ],
+    )
+
+    stats = enrich_papers(path)
+
+    agent = _by_slug(path)["atlas-agent"]
+    assert stats["enriched"] == 1 and stats["promoted"] == 0
+    assert agent["paperMeta"]["venue"] == "Cell" and agent["status"] == "no-repo"
 
 
 # --- sync_venue_tags ----------------------------------------------------------

@@ -14,7 +14,10 @@ is never overwritten. Agents that already have `paperMeta` are skipped, so
 re-runs only retry the misses (`force=True` re-enriches all). `only` scopes
 the run to agents whose slug, name, repo, or paperMeta title/DOI contains a
 given substring (case-insensitive) — for adding one record without churning
-the rest.
+the rest. When a record lands, the agent's status is re-derived with the
+fresh venue: a journal/conference paper qualifies for auto-stable at any
+star count, so paper-backed agents promote instead of lingering in the
+pre-paper status their add-time derivation froze in.
 
 `refresh_citations` refreshes the `citations` field (Semantic Scholar
 citationCount) on every agent that already has a `paperMeta` record. Nothing
@@ -36,6 +39,7 @@ from __future__ import annotations
 import re
 import time
 import urllib.request
+from datetime import datetime
 
 from ..record import _get_client, search_by_doi, search_by_title
 from .papers import (
@@ -50,8 +54,18 @@ from .papers import (
 )
 from .policy import registered_venue_tag
 from .snapshot import read_snapshot, write_snapshot
+from .transform import resolve_repo_status
 
 ARXIV_API_TIMEOUT_SECONDS = 20
+
+
+def _parse_pushed_at(value) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value))
+    except ValueError:
+        return None
 
 
 def _to_meta(r: dict) -> PaperMeta:
@@ -143,10 +157,13 @@ def enrich_papers(
     """Fill paperMeta from Semantic Scholar for every agent with a precise clue.
 
     Skips agents that already have paperMeta unless ``force``; scopes to
-    agents matching ``only`` (see :func:`_matches_only`) when given. Always
+    agents matching ``only`` (see :func:`_matches_only`) when given. After a
+    record lands, the agent's status is re-derived with the fresh venue —
+    a journal/conference paper qualifies for auto-stable at any star count,
+    so a paper-backed agent never lingers in its pre-paper status. Always
     rewrites the snapshot at the end (even with nothing enriched), matching
-    the TypeScript command. Returns {"enriched", "filled_link", "unresolved",
-    "skipped", "misses"}.
+    the TypeScript command. Returns {"enriched", "filled_link", "promoted",
+    "unresolved", "skipped", "misses"}.
     """
     snapshot = read_snapshot(snapshot_file)
     agents = snapshot["agents"]
@@ -179,6 +196,7 @@ def enrich_papers(
         return {
             "enriched": 0,
             "filled_link": 0,
+            "promoted": 0,
             "unresolved": 0,
             "skipped": len(agents) - len(pending),
             "misses": [],
@@ -277,7 +295,7 @@ def enrich_papers(
         for slug in entry["slugs"]:
             resolved[slug] = (clues[slug], _to_meta(best))
 
-    enriched = filled_link = 0
+    enriched = filled_link = promoted = 0
     misses: list[str] = []
     for a in agents:
         hit = resolved.get(a["slug"])
@@ -287,6 +305,23 @@ def enrich_papers(
             continue
         clue, meta = hit
         a["paperMeta"] = meta
+        # A freshly attached venue can change the status verdict — journal/
+        # conference papers qualify for auto-stable at any star count. Without
+        # this re-derivation, paper-backed agents linger in the pre-paper
+        # status their add-time derivation froze in. Protected statuses
+        # (stable, no-repo) resolve to themselves, so this only ever promotes.
+        prev_status = str(a.get("status") or "")
+        status = resolve_repo_status(
+            current_status=prev_status,
+            archived=bool(a.get("archived")),
+            stars=int(a.get("stars") or 0),
+            pushed_at=_parse_pushed_at(a.get("pushedAt")),
+            paper_venue=str(meta.get("venue") or ""),
+            auto_stable_exempt=bool(a.get("autoStableExempt")),
+        )
+        if status != prev_status:
+            a["status"] = status
+            promoted += 1
         if not a.get("paper"):
             url = clue_paper_url(clue, meta)
             if url:
@@ -297,6 +332,7 @@ def enrich_papers(
     write_snapshot(snapshot_file, snapshot)
     status_cb(
         f"\nDone. enriched={enriched} paper-links-filled={filled_link} "
+        f"status-promoted={promoted} "
         f"unresolved={len(misses)} skipped={len(agents) - len(pending)}"
     )
     if filled_link > 0:
@@ -310,6 +346,7 @@ def enrich_papers(
     return {
         "enriched": enriched,
         "filled_link": filled_link,
+        "promoted": promoted,
         "unresolved": len(misses),
         "skipped": len(agents) - len(pending),
         "misses": misses,

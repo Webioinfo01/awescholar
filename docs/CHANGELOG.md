@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.2.9 - 2026-09-18
+
+### Fixes
+
+- `updater backfill --agentx --fields paper-meta` now re-derives the agent's status with the freshly resolved venue: a journal/conference paper promotes to `stable` at any star count instead of lingering in the pre-paper status its add-time derivation froze in (the "published but stuck in nursery" bug class). Protected statuses (`stable`, `no-repo`) resolve to themselves; the run reports a `status-promoted` count.
+
+### Features
+
+- New registered venue tags: `Cell`, `Nature-Medicine`, `NEJM-AI`, `JCST`, `Advanced-Materials`, `ACL-Findings`, `EMNLP-Findings` — venue spellings that fold onto these tags now project onto agent tags via venue-tags backfill. Aliases include Journal of Computational Science and Technology → `JCST`, the Semantic Scholar misspelling "Advances in Materials" → `Advanced-Materials` (10.1002/adma), and both Findings-track spellings.
+
 ## v0.2.8 - 2026-09-18
 
 ### Features
