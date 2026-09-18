@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.3.1 - 2026-09-19
+
+### Features
+
+- AgentX snapshot records now carry an optional `listedAt` curation date (date-only ISO, stamped by `updater add --agentx` at intake): `updater enrich --agentx` carries it along untouched instead of dropping it, and `verify --agentx` validates the shape when present. Records that predate the field simply omit it — the AgentX Hub website reads it as the editorial "when this agent entered the registry" clock (New today / New badges), decoupled from database row timestamps.
+
 ## v0.3.0 - 2026-09-18
 
 ### Features

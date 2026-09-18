@@ -109,4 +109,8 @@ def merge_snapshot_agent(
         out["retiredReason"] = agent["retiredReason"]
     if "retiredStars" in agent:
         out["retiredStars"] = agent["retiredStars"]
+    # Curation date (when the curator listed the agent) rides along the same
+    # way: enrich refreshes metrics, never when the record entered the registry.
+    if "listedAt" in agent:
+        out["listedAt"] = agent["listedAt"]
     return out

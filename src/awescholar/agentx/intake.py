@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from awescholar.agentx.policy import CATEGORIES, find_tag_policy_violations, tag_type
@@ -257,5 +257,10 @@ def _agent_from_intake(
         "status": status,
         "source": _coalesce(rec.get("source"), "manual"),
         "sourceUrl": rec.get("sourceUrl") or None,
+        # Curation date (date-only, UTC): when the curator listed the agent.
+        # Stamped once at intake, never refreshed — enrich carries it along
+        # untouched. The website parses the bare date as UTC midnight, so the
+        # stamp and the badge window share one clock.
+        "listedAt": datetime.now(tz=UTC).date().isoformat(),
     }
     return agent
