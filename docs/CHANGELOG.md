@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.2.7 - 2026-09-18
+
+### Features
+
+- `updater backfill --agentx --fields venue-tags`: projects `paperMeta.venue` onto tags via the registered-venue lookup (offline, no network); `--fields paper-meta` and the default run sync it after resolving papers, and `verify --agentx` enforces the invariant — a venue that maps to a registered tag must carry that tag
+- S2 records for fresh arXiv preprints (empty DOI and venue) now derive both from the `externalIds.ArXiv` ID — `doi = 10.48550/arXiv.<id>` (DataCite mints one for every arXiv paper) and `venue = arXiv` — in every search/backfill projection, both orientations; existing DOI/venue values are never overridden
+
 ## v0.2.6 - 2026-09-18
 
 AgentX absorption release — the standalone agentx-cli (TypeScript) is fully replaced by awescholar, one tool for both orientations: awesome-list projects are paper-oriented (the archive is a category dict of paper records) and the AgentX hub is project-oriented (the snapshot is a slug-sorted agent list keyed by GitHub repo). The registry logic — tag policy, lifecycle rules, writer invariants — now lives in `awescholar.agentx`, and every former agentx-cli command has an awescholar equivalent. No Node runtime, no subprocess bridge, no shape-sniffing version detection.
@@ -9,11 +16,10 @@ AgentX absorption release — the standalone agentx-cli (TypeScript) is fully re
 - `updater add --agentx owner/repo --category <slug> [--tags "A,B"]` replaces `agentx add`: validates the repo against the registry category/tag policy, fetches live GitHub metrics, derives the initial status, appends in stable slug order
 - `updater add --agentx --from-json candidates.json` replaces `agentx add --from-json`: batch-intakes a `render agentx` candidate file, all-or-nothing
 - `updater enrich --agentx` now covers the full former `agentx snapshot`: the GitHub metrics refresh (existing) plus the lifecycle pass (new) — 404 → gone via HEAD checks, status re-derivation, retirement freeze/clear, NOASSERTION license text fallback — and writes slug-sorted with recomputed counts
-- `updater backfill --agentx` replaces `agentx enrich-papers` and `agentx refresh-citations`: `--fields paper-meta` resolves paperMeta from DOI/arXiv/title clues via Semantic Scholar and syncs registered venue tags (`--refresh` re-resolves existing records), `--fields venue-tags` repairs that projection without network access, `--fields citations` refreshes citation counts; default fills paper metadata, venue tags, and citations
+- `updater backfill --agentx` replaces `agentx enrich-papers` and `agentx refresh-citations`: `--fields paper-meta` resolves paperMeta from DOI/arXiv/title clues via Semantic Scholar (`--refresh` re-resolves existing records), `--fields citations` refreshes citation counts; default fills both
 - New top-level `verify --agentx` replaces `agentx validate`: the offline writer-invariants gate (CI runs exactly this), exit 1 with an itemized problem list on any violation
 - `render agentx` unchanged in behavior; its output now documents the new intake command
 - `agentx_slugify` is now Unicode-aware, matching the former TypeScript slugify (CJK and accented names slug identically on both sides); newly exported slugs with non-ASCII names may differ from previous ASCII-only exports
-- S2 records for fresh arXiv preprints (empty DOI and venue) now derive both from the `externalIds.ArXiv` ID — `doi = 10.48550/arXiv.<id>` (DataCite mints one for every arXiv paper) and `venue = arXiv` — in every search/backfill projection, both orientations; existing DOI/venue values are never overridden
 - Breaking: the `agentx` npm binary is deprecated — replace `agentx add|snapshot|enrich-papers|refresh-citations|validate` with the awescholar commands above; `--archive` defaults to `data/agents-snapshot.json` in `--agentx` mode
 
 ## v0.2.5 - 2026-09-17
