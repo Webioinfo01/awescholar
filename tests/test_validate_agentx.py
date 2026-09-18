@@ -151,7 +151,7 @@ def test_requires_registered_paper_venue_tag():
 def test_unknown_paper_venue_does_not_require_a_tag():
     file = _fixture()
     file["agents"][0]["tags"] = ["Stanford"]
-    file["agents"][0]["paperMeta"]["venue"] = "NEJM AI"
+    file["agents"][0]["paperMeta"]["venue"] = "Nvidia's blog"
     assert validate.validate_snapshot_file(file) == []
 
 

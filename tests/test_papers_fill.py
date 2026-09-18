@@ -392,7 +392,7 @@ def test_sync_venue_tags_adds_canonical_registered_venue_and_is_idempotent(tmp_p
         [
             _agent("nature-agent", tags=["Stanford"], paperMeta=_meta("", "Nature paper", 1)),
             _agent("alias-agent", paperMeta={**_meta("", "BME paper", 1), "venue": "Nature Biomedical Engineering"}),
-            _agent("unknown-agent", paperMeta={**_meta("", "Unknown paper", 1), "venue": "NEJM AI"}),
+            _agent("unknown-agent", paperMeta={**_meta("", "Unknown paper", 1), "venue": "Nvidia's blog"}),
         ],
     )
     by_slug = _by_slug(path)

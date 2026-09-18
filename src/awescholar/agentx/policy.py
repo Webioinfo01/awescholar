@@ -248,6 +248,13 @@ TAG_TYPE: dict[str, str] = {
     "JCIM": "venue",
     "Plant-Communications": "venue",
     "Lancet-Digital-Health": "venue",
+    "Cell": "venue",
+    "Nature-Medicine": "venue",
+    "NEJM-AI": "venue",
+    "JCST": "venue",
+    "Advanced-Materials": "venue",
+    "ACL-Findings": "venue",
+    "EMNLP-Findings": "venue",
     # tech — agent-relevant framework/protocol it builds on
     "MCP": "tech",
     "A2A": "tech",
@@ -276,6 +283,16 @@ VENUE_ALIASES: dict[str, str] = {
     "Journal of chemical information and modeling": "JCIM",
     "IEEE transactions on bio-medical engineering": "IEEE-TBME",
     "Bioinform.": "Bioinformatics",
+    "Journal of Computational Science and Technology": "JCST",
+    # S2's misspelling of Advanced Materials (DOI prefix 10.1002/adma)
+    "Advances in Materials": "Advanced-Materials",
+    # conference findings tracks
+    "Findings of ACL 2026": "ACL-Findings",
+    "Findings of the Association for Computational Linguistics: ACL 2026":
+        "ACL-Findings",
+    "Findings of EMNLP 2025": "EMNLP-Findings",
+    "Findings of the Association for Computational Linguistics: EMNLP 2025":
+        "EMNLP-Findings",
 }
 
 def _canonical_fold(s: str) -> str:
