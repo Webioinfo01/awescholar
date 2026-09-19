@@ -28,7 +28,7 @@
 
 awescholar 用一套工具服务两种项目取向 — **论文取向的 awesome 列表**（data.json 存档：crawler → updater → render → reader）和**项目取向的 AgentX 集线器**（data/agents-snapshot.json 快照：updater --agentx 命令 + verify）。同一个实体既是一条论文记录，也是一条 agent 记录；`render agentx` 负责两者之间的投影。
 
-> **说明：** 独立的 `agentx-cli`（npm `agentx-hub-cli`）已于 awescholar 0.2.6 并入本工具。自 v0.3.0 起本包同时安装 `agentx` 命令 —— 同一批命令的短别名：`agentx add | enrich | backfill | validate`。
+> **说明：** 独立的 `agentx-cli`（npm `agentx-hub-cli`）已于 awescholar 0.2.6 并入本工具。v0.3.0 引入的 `agentx` 命令别名已在 v0.3.2 移除 —— 策展直接用 awescholar 的 `--agentx` 原生命令；npm 包 v0.2.0 起重生为 Hub **运维** CLI。
 
 ## awescholar 驱动的项目
 
@@ -288,22 +288,23 @@ awescholar reader stats --archive data.json --category "AI Agents"   # 单分类
 
 ## AgentX 集线器
 
-典型的 hub 维护流程：
+典型的 hub 维护流程（原生命令；策展永远直接走 `awescholar` 本体）：
 
 ```text
-render agentx → agentx add --from-json → agentx enrich → agentx validate → commit
+render agentx → updater add --agentx --from-json → updater enrich --agentx → verify --agentx → commit
 ```
-
-自 v0.3.0 起，本包在 `awescholar` 之外同时安装 `agentx` 命令 —— 下面各 AgentX 模式的纯别名，底层命令的全部旗标原样继承：
 
 ```bash
-agentx add owner/repo --category <slug> [--tags "A,B"] [--paper URL]   # == awescholar updater add --agentx …
-agentx enrich                                                          # == awescholar updater enrich --agentx
-agentx backfill [--fields paper-meta,venue-tags,citations]             # == awescholar updater backfill --agentx
-agentx validate                                                        # == awescholar verify --agentx
+awescholar updater add --agentx owner/repo --category <slug> [--tags "A,B"] [--paper URL]
+awescholar updater enrich --agentx
+awescholar updater backfill --agentx [--fields paper-meta,venue-tags,citations]
+awescholar verify --agentx
 ```
 
-命令映射（旧 `agentx-cli` → 新 `awescholar`）：
+> v0.3.0 的 `agentx` 命令别名（上述命令的短写）已于 v0.3.2 移除 —— 一个命令名只有一个归属。Hub **运维**（快照落库、评价审核、镜像到公共 hub）在独立的
+> [`agentx-hub-cli`](https://github.com/Webioinfo01/agentx-hub-cli) npm 包（v0.2.0+），它包装 hub 网站自己的脚本和 workflow。
+
+命令映射（旧 `agentx-cli` v0.1.x → `awescholar`）：
 
 | 旧 `agentx-cli` | 新 `awescholar` |
 |---|---|
