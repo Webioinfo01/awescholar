@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "awescholar"
-version = "0.3.1"
+version = "0.3.2"
 description = "Automated scientific literature discovery and curation for Awesome lists"
 requires-python = ">=3.11"
 license = "MPL-2.0"
@@ -26,7 +26,6 @@ line-length = 100
 
 [project.scripts]
 awescholar = "awescholar.cli:main"
-agentx = "awescholar.agentx_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -28,7 +28,7 @@ A lightweight CLI that automates the paper curation workflow: query Semantic Sch
 
 awescholar now serves two orientations with one tool — **paper-oriented awesome lists** (data.json archive: crawler → updater → render → reader) and the **project-oriented AgentX hub** (data/agents-snapshot.json snapshot: updater --agentx commands + verify). The same entity is both a paper record and an agent record; `render agentx` bridges them.
 
-> **Note:** the standalone `agentx-cli` (npm `agentx-hub-cli`) was deprecated and absorbed into awescholar 0.2.6. Since v0.3.0 the package also installs an `agentx` console script — short aliases over the same commands: `agentx add | enrich | backfill | validate`.
+> **Note:** the standalone `agentx-cli` (npm `agentx-hub-cli`) was deprecated and absorbed into awescholar 0.2.6. The v0.3.0 `agentx` console script aliases were removed in v0.3.2 — curation uses awescholar's native `--agentx` commands; the npm package was reborn (v0.2.0) as the hub **operations** CLI.
 
 ## Powered by awescholar
 
@@ -292,22 +292,28 @@ awescholar reader stats --archive data.json --category "AI Agents"   # Stats for
 
 ## AgentX hub
 
-The typical hub workflow:
+The typical hub workflow (native commands; curation always runs through `awescholar` itself):
 
 ```text
-render agentx → agentx add --from-json → agentx enrich → agentx validate → commit
+render agentx → updater add --agentx --from-json → updater enrich --agentx → verify --agentx → commit
 ```
-
-Since v0.3.0 the package installs an `agentx` console script next to `awescholar` — pure aliases over the AgentX modes below; every flag of the underlying command is inherited:
 
 ```bash
-agentx add owner/repo --category <slug> [--tags "A,B"] [--paper URL]   # == awescholar updater add --agentx …
-agentx enrich                                                          # == awescholar updater enrich --agentx
-agentx backfill [--fields paper-meta,venue-tags,citations]             # == awescholar updater backfill --agentx
-agentx validate                                                        # == awescholar verify --agentx
+awescholar updater add --agentx owner/repo --category <slug> [--tags "A,B"] [--paper URL]
+awescholar updater enrich --agentx
+awescholar updater backfill --agentx [--fields paper-meta,venue-tags,citations]
+awescholar verify --agentx
 ```
 
-Command mapping (old `agentx-cli` → new `awescholar`):
+> The v0.3.0 `agentx` console script (short aliases over these commands)
+> was removed in v0.3.2 — one command name, one owner. Hub **operations**
+> (sync the snapshot into the hub database, moderate reviews, mirror to
+> the public hub) live in the separate
+> [`agentx-hub-cli`](https://github.com/Webioinfo01/agentx-hub-cli) npm
+> package (v0.2.0+), which wraps the hub website's own scripts and
+> workflows.
+
+Command mapping (old `agentx-cli` v0.1.x → `awescholar`):
 
 | Old `agentx-cli` | New `awescholar` |
 |---|---|

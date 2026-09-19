@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.3.2 - 2026-09-19
+
+### Changes
+
+- Removed the `agentx` console script introduced in v0.3.0 — one command
+  name, one owner. Registry curation uses awescholar's native commands
+  (`updater add/enrich/backfill --agentx`, `verify --agentx`); hub
+  **operations** (sync the snapshot into the hub database, moderate
+  reviews, mirror to the public hub) moved to the reborn npm package
+  [`agentx-hub-cli` v0.2.0+](https://github.com/Webioinfo01/agentx-hub-cli),
+  which wraps the hub website's own scripts and workflows. Upgrading the
+  package removes the stale `agentx` entry point.
+
 ## v0.3.1 - 2026-09-19
 
 ### Features
