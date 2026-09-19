@@ -20,7 +20,7 @@ class PaperMeta(TypedDict):
 
 class PaperClue(NamedTuple):
     """A resolvable paper identifier extracted from an agent record."""
-    kind: Literal["doi", "arxiv", "title"]
+    kind: Literal["doi", "arxiv", "s2", "title"]
     value: str
 
 
@@ -35,6 +35,10 @@ _NATURE_URL = re.compile(
     r"(?:^|\.)nature\.com/articles/((?:10\.\d{4,5}/)?[^\s?#)]+)", re.IGNORECASE
 )
 _ARXIV_MENTION = re.compile(r"arxiv[:\s](\d{4}\.\d{4,5})", re.IGNORECASE)
+# Semantic Scholar paper pages, bare (/paper/<40-hex paperId>) or slugged
+# (/paper/<slug>/<paperId>) — the fallback paper link record.py writes when
+# an S2 record carries no DOI yet.
+_S2_PAPER_URL = re.compile(r"semanticscholar\.org/paper/(?:[a-z0-9-]+/)?([0-9a-f]{40})", re.IGNORECASE)
 # Straight quotes and Unicode curly quotes used to delimit quoted titles.
 _ANY_QUOTE = re.compile(r'["\u201c\u201d]')
 
@@ -45,9 +49,10 @@ def extract_paper_clue(
     agent: dict[str, str | None],
 ) -> PaperClue | None:
     """The single most precise paper clue an agent record carries, in priority
-    order: DOI in the paper URL, arXiv ID in the paper URL, arXiv mention in
-    the description, arXiv in the homepage, verbatim quoted title in the
-    description. Returns None when nothing precise is available.
+    order: DOI in the paper URL, arXiv ID in the paper URL, Semantic Scholar
+    paperId in the paper URL, arXiv mention in the description, arXiv in the
+    homepage, verbatim quoted title in the description. Returns None when
+    nothing precise is available.
     """
     paper = agent.get("paper") or ""
 
@@ -65,6 +70,10 @@ def extract_paper_clue(
     m = _ARXIV_URL.search(paper)
     if m:
         return PaperClue(kind="arxiv", value=m.group(1))
+
+    m = _S2_PAPER_URL.search(paper)
+    if m:
+        return PaperClue(kind="s2", value=m.group(1))
 
     m = _ARXIV_MENTION.search(agent.get("description") or "")
     if m:
@@ -101,6 +110,8 @@ def clue_paper_url(clue: PaperClue, meta: PaperMeta | None) -> str | None:
         return f"https://doi.org/{clue.value}"
     if clue.kind == "arxiv":
         return f"https://arxiv.org/abs/{clue.value}"
+    if clue.kind == "s2":
+        return f"https://www.semanticscholar.org/paper/{clue.value}"
     return meta.get("paperUrl") if meta else None
 
 

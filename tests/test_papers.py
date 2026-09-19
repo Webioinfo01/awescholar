@@ -28,6 +28,24 @@ def test_reads_arxiv_ids_from_paper_urls_and_description_mentions():
     ) == papers.PaperClue(kind="arxiv", value="2505.20286")
 
 
+def test_reads_s2_paper_ids_from_bare_and_slugged_paper_pages():
+    paper_id = "f5af8e3f7acd968b7baeb788f5b33cf7d868616e"
+    assert papers.extract_paper_clue(
+        {"paper": f"https://www.semanticscholar.org/paper/{paper_id}"}
+    ) == papers.PaperClue(kind="s2", value=paper_id)
+    assert papers.extract_paper_clue(
+        {"paper": f"https://www.semanticscholar.org/paper/Some-Paper-Title/{paper_id}"}
+    ) == papers.PaperClue(kind="s2", value=paper_id)
+
+
+def test_s2_clue_round_trips_through_clue_paper_url():
+    clue = papers.PaperClue(kind="s2", value="f5af8e3f7acd968b7baeb788f5b33cf7d868616e")
+    assert papers.clue_paper_url(clue, None) == (
+        "https://www.semanticscholar.org/paper/"
+        "f5af8e3f7acd968b7baeb788f5b33cf7d868616e"
+    )
+
+
 def test_falls_back_to_quoted_title():
     assert papers.extract_paper_clue(
         {

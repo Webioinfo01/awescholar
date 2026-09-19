@@ -118,6 +118,26 @@ def search_by_title(title: str, sch: SemanticScholar) -> dict | None:
         return None
 
 
+def search_by_paper_id(paper_id: str, sch: SemanticScholar) -> dict | None:
+    """Resolve a bare Semantic Scholar paperId (from an S2 page link) exactly."""
+    if not paper_id.strip():
+        return None
+    try:
+        paper = retry_with_backoff(
+            sch.get_paper,
+            paper_id,
+            fields=["paperId", "title", "venue", "year",
+                    "publicationDate", "authors", "externalIds", "url", "journal",
+                    "citationCount", "abstract"],
+        )
+        rec = _paper_to_record(paper)
+        if rec and rec.get("title"):
+            return rec
+    except Exception as e:  # noqa: BLE001 — one failed lookup must not abort the batch
+        print(f"  Error: {e}")
+    return None
+
+
 def _lookup_doi_local(doi: str) -> dict | None:
     """Find a DOI in recent pipeline outputs under cwd.
 

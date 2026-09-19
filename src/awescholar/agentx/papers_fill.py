@@ -2,10 +2,10 @@
 the Python ports of agentx-cli's `enrich-papers` and `refresh-citations`.
 
 `enrich_papers` resolves a paper record for every agent that carries a
-precise paper clue — a DOI or arXiv ID in its paper/homepage URL, an arXiv
-mention or verbatim quoted title in its description — through Semantic
-Scholar (Crossref backstops DOIs S2 has not indexed yet) and stores the
-record as `paperMeta`. Agents whose only clue is an
+precise paper clue — a DOI, arXiv ID, or Semantic Scholar paperId in its
+paper/homepage URL, an arXiv mention or verbatim quoted title in its
+description — through Semantic Scholar (Crossref backstops DOIs S2 has not
+indexed yet) and stores the record as `paperMeta`. Agents whose only clue is an
 arXiv ID whose DataCite DOI is not indexed fall back to resolving the title
 via the arXiv API and re-querying by title.
 
@@ -41,7 +41,7 @@ import time
 import urllib.request
 from datetime import datetime
 
-from ..record import _get_client, search_by_doi, search_by_title
+from ..record import _get_client, search_by_doi, search_by_paper_id, search_by_title
 from .papers import (
     DESCRIPTION_MATCH_THRESHOLD,
     TITLE_MATCH_THRESHOLD,
@@ -190,7 +190,8 @@ def enrich_papers(
     status_cb(
         f"Enriching {len(pending)}/{len(agents)} agents — "
         f"clues: {len(by_kind('doi'))} DOI, {len(by_kind('arxiv'))} arXiv, "
-        f"{len(by_kind('title'))} title, {no_clue} without a precise clue."
+        f"{len(by_kind('s2'))} S2, {len(by_kind('title'))} title, "
+        f"{no_clue} without a precise clue."
     )
     if not clues:
         return {
@@ -220,6 +221,21 @@ def enrich_papers(
                 if record.get("doi"):
                     doi_records[record["doi"].lower()] = record
         status_cb(f"  S2 DOI lookups: {len(doi_query)} queries -> {hits} records")
+
+    # Pass 1b: S2 page links carry the paperId itself — one exact lookup per
+    # id, no title fuzzing needed.
+    s2_query: dict[str, list[str]] = {}  # paperId (lowercase) -> slugs
+    for slug, clue in by_kind("s2"):
+        s2_query.setdefault(clue.value.lower(), []).append(slug)
+    s2_records: dict[str, dict] = {}  # paperId (lowercase) -> record
+    if s2_query:
+        hits = 0
+        for paper_id in s2_query:
+            record = search_by_paper_id(paper_id, sch)
+            if record:
+                hits += 1
+                s2_records[paper_id] = record
+        status_cb(f"  S2 paperId lookups: {len(s2_query)} queries -> {hits} records")
 
     # Pass 2: agents whose DOI lookup missed -> retry by title. arXiv clues
     # get their title from the arXiv API; DOI clues try the description —
@@ -281,6 +297,12 @@ def enrich_papers(
         if not record:
             continue
         for slug in entry["slugs"]:
+            resolved[slug] = (clues[slug], _to_meta(record))
+    for paper_id, slugs in s2_query.items():
+        record = s2_records.get(paper_id)
+        if not record:
+            continue
+        for slug in slugs:
             resolved[slug] = (clues[slug], _to_meta(record))
     for query, entry in title_query.items():
         # Title clues match fuzzily: accept the record covering the query best.

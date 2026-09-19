@@ -120,7 +120,7 @@ def test_enrich_doi_clue_writes_paper_meta(tmp_path, monkeypatch):
 
     assert doi_calls == ["10.1038/s41586-026-00000-0"]
     assert (
-        "Enriching 2/2 agents — clues: 1 DOI, 0 arXiv, 0 title, "
+        "Enriching 2/2 agents — clues: 1 DOI, 0 arXiv, 0 S2, 0 title, "
         "1 without a precise clue." in lines
     )
     assert stats == {
@@ -144,6 +144,46 @@ def test_enrich_doi_clue_writes_paper_meta(tmp_path, monkeypatch):
         "paperUrl": "https://doi.org/10.1038/s41586-026-00000-0",
         "citations": 12,
     }
+
+
+def test_enrich_s2_clue_resolves_by_paper_id(tmp_path, monkeypatch):
+    paper_id = "F5AF8E3F7ACD968B7BAEB788F5B33CF7D868616E"
+    id_calls = []
+
+    def fake_paper_id(pid, sch):
+        id_calls.append(pid)
+        return _record(
+            "scCompass: An Integrated Multi-Species scRNA-seq Database",
+            "10.1002/advs.202500870",
+            citations=11,
+            venue="",  # not a registered journal tier -> no status promotion
+            year="2025.06",
+        )
+
+    monkeypatch.setattr(papers_fill, "search_by_paper_id", fake_paper_id)
+    monkeypatch.setattr(papers_fill, "search_by_doi", _must_not_call("search_by_doi"))
+    monkeypatch.setattr(papers_fill, "search_by_title", _must_not_call("search_by_title"))
+    path = _snapshot_file(
+        tmp_path,
+        [_agent("sccompass", paper=f"https://www.semanticscholar.org/paper/{paper_id}")],
+    )
+    lines: list[str] = []
+
+    stats = enrich_papers(path, status_cb=lines.append)
+
+    assert id_calls == [paper_id.lower()]
+    assert (
+        "Enriching 1/1 agents — clues: 0 DOI, 0 arXiv, 1 S2, 0 title, "
+        "0 without a precise clue." in lines
+    )
+    assert stats["enriched"] == 1 and stats["promoted"] == 0 and stats["misses"] == []
+    agent = _by_slug(path)["sccompass"]
+    assert agent["status"] == "active"
+    # The existing paper link is never overwritten, even though a canonical
+    # DOI link is now known.
+    assert agent["paper"] == f"https://www.semanticscholar.org/paper/{paper_id}"
+    assert agent["paperMeta"]["doi"] == "10.1002/advs.202500870"
+    assert agent["paperMeta"]["citations"] == 11
 
 
 def test_enrich_arxiv_clue_queries_datacite_doi(tmp_path, monkeypatch):
