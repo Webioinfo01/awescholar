@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.3.3
+
+New primary AgentX category 'reviews' ("Reviews & Surveys") — registry entries whose deliverable is a curated reading list: survey/awesome-list companion repos. Slots between 'datasets' and 'safety-security' in CATEGORY_ORDER. validate.py accepts the slug; intake via 'updater add --agentx --category reviews'.
+
 ## v0.3.2 - 2026-09-19
 
 ### Changes
