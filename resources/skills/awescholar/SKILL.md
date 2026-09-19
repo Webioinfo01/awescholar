@@ -30,6 +30,7 @@ Match the user's intent to a task domain, then follow the workflow below.
 | "Refresh AgentX registry stats", "update the agentx snapshot" | Updater Enrich-AgentX | `awescholar updater enrich --archive agents-snapshot.json --agentx` |
 | "Backfill citation counts", "fill citations" | Updater Backfill | `awescholar updater backfill --archive docs/data.json --fields citations` |
 | "Fill missing affiliations/teams", "补机构信息" | Updater Backfill | `awescholar updater backfill --archive docs/data.json` |
+| "Download the PDFs", "下全文", "fetch full text" | Updater Download | `awescholar updater download --archive docs/data.json` |
 | "Preprint upgraded to journal?", "升级正式发表版" | Updater Publish-Scan | `awescholar updater publish-scan --archive docs/data.json` |
 | "Export papers as agentx agents", "feed the agent registry" | Render AgentX | `awescholar render agentx --archive docs/data.json -o candidates.json` |
 | "What's in my archive about X", "search my curated papers" | Reader Query | `awescholar reader query --archive docs/data.json "X" --json` |
@@ -232,6 +233,20 @@ awescholar updater backfill --archive docs/data.json --fields citations  # only 
 ```
 
 There is no separate `updater citations` command — use `backfill --fields citations`.
+
+### Updater Download
+
+Use when the user wants the actual PDFs for archived papers (or a standalone DOI/arXiv ID). Open-access direct links only: arXiv IDs (detected from `10.48550/arXiv.*` DOIs or arxiv.org paperUrls) download from arxiv.org; other DOIs resolve through OpenAlex `best_oa_location.pdf_url`. Every response is checked to start with `%PDF` — bot-gated publisher pages (cell.com and friends) answer HTML and are reported as failures with the article link, never forced. Files land in `--out` (default `pdfs/`) as `<year>-<title-slug>.pdf`; existing files are skipped so re-runs are idempotent. The archive is never modified.
+
+```bash
+awescholar updater download --archive docs/data.json            # PDFs for the whole archive -> pdfs/
+awescholar updater download --archive docs/data.json --only XunZi   # scope by DOI/title substring
+awescholar updater download --archive docs/data.json --out docs/pdf --force  # re-download even if present
+awescholar updater download --doi 10.1038/s41467-025-59628-y    # standalone DOI, no archive needed
+awescholar updater download --arxiv 2609.11115                  # standalone arXiv ID
+```
+
+When a paper fails as "not a PDF", it is bot-gated — fetch it in a real browser; do not retry the CLI on it.
 
 ### Reader (Query · Related · Recommend · Stats)
 

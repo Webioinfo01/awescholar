@@ -459,6 +459,19 @@ def cmd_enrich(args: argparse.Namespace, config: dict) -> int | None:
               f"refreshed stars for {stats['refreshed']}/{stats['refresh_candidates']}")
 
 
+def cmd_download(args: argparse.Namespace, config: dict) -> int | None:
+    from .downloader import download_pdfs
+
+    if not args.archive and not args.doi and not args.arxiv:
+        print("Error: --archive is required (or pass --doi/--arxiv to download "
+              "standalone papers)", file=sys.stderr)
+        return 1
+    download_pdfs(
+        archive_path=args.archive, out_dir=args.out, only=args.only,
+        force=args.force, dois=args.doi, arxiv_ids=args.arxiv,
+    )
+
+
 def cmd_export_agentx(args: argparse.Namespace, config: dict) -> int | None:
     from .agentx_export import export_agentx
 
@@ -884,6 +897,20 @@ def main(argv: list[str] | None = None, prog: str = "awescholar") -> int:
                         "stars/pushedAt/openIssues/language/license/description/homepage/archived "
                         "and preserve status, slug, paperMeta, category, etc.")
 
+    p = updater_sub.add_parser("download", help="Download open-access PDFs (arXiv direct + OpenAlex "
+                                                "OA links; bot-gated publisher pages are skipped, not forced)")
+    p.add_argument("--archive", type=str,
+                   help="Path to project data JSON; download PDFs for its records")
+    p.add_argument("--only", action="append",
+                   help="Scope to entries whose DOI equals this or whose title contains it (repeatable)")
+    p.add_argument("--doi", action="append", metavar="DOI",
+                   help="Download this DOI directly, no archive needed (repeatable)")
+    p.add_argument("--arxiv", action="append", metavar="ID",
+                   help="Download this arXiv ID directly, no archive needed (repeatable)")
+    p.add_argument("--out", type=str, default="pdfs", help="Output directory (default: pdfs/)")
+    p.add_argument("--force", action="store_true",
+                   help="Re-download even when the target file already exists")
+
     # render — derive artifacts from the project data JSON; the archive is never modified
     render = sub.add_parser("render", help="Render artifacts (README tables, counts, RSS, digests, agentx exports) "
                                            "from project data JSON")
@@ -1040,7 +1067,7 @@ def main(argv: list[str] | None = None, prog: str = "awescholar") -> int:
         handlers = {
             "update": cmd_update, "search": cmd_search_record, "add": cmd_add,
             "dedupe": cmd_dedupe, "publish-scan": cmd_publish_scan,
-            "backfill": cmd_backfill, "enrich": cmd_enrich,
+            "backfill": cmd_backfill, "enrich": cmd_enrich, "download": cmd_download,
         }
         return handlers[args.updater_command](args, config) or 0
 

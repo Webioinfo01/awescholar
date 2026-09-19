@@ -261,6 +261,11 @@ awescholar updater enrich --archive data.json --limit 20 --no-llm  # Resolve at 
 awescholar updater enrich --archive data.json --only XunZi   # Resolve/refresh matching entries only
 awescholar updater enrich --archive data.json --since 2026-09-01  # Only entries added on/after this date (needs addedAt)
 awescholar updater enrich --archive agents-snapshot.json --agentx  # Refresh an AgentX registry snapshot (stars/pushedAt/openIssues/language/license/description/homepage/archived; status strictly preserved)
+awescholar updater download --archive data.json       # Download open-access PDFs -> pdfs/ (arXiv direct + OpenAlex OA links; bot-gated pages reported, never forced)
+awescholar updater download --archive data.json --only XunZi   # Download matching entries only (DOI or title substring, repeatable)
+awescholar updater download --archive data.json --out docs/pdf --force  # Other directory; re-download existing files
+awescholar updater download --doi 10.1038/s41467-025-59628-y  # Standalone DOI, no archive needed
+awescholar updater download --arxiv 2609.11115        # Standalone arXiv ID
 
 # Render artifacts (render) — derived from project data JSON, never modify it
 awescholar render readme --archive data.json         # Generate README tables (with .bak backup)
