@@ -31,15 +31,38 @@ def test_idle_days_round_trip():
 # --- resolveRepoStatus -------------------------------------------------------
 
 
-def test_never_rederives_protected_statuses():
-    for status in ("stable", "no-repo"):
-        assert transform.resolve_repo_status(
-            current_status=status,
-            archived=True,
-            stars=0,
-            pushed_at=days_ago(400),
-            now=NOW,
-        ) == status
+def test_keeps_no_repo_and_maps_quiet_or_owner_archived_stable_records():
+    assert transform.resolve_repo_status(
+        current_status="no-repo",
+        archived=True,
+        stars=0,
+        pushed_at=days_ago(400),
+        now=NOW,
+    ) == "no-repo"
+    # A quiet stable record keeps its verdict — it never slides into stale
+    # or archived, no matter how long the silence.
+    assert transform.resolve_repo_status(
+        current_status="stable",
+        archived=False,
+        stars=10,
+        pushed_at=days_ago(130),
+        now=NOW,
+    ) == "stable"
+    assert transform.resolve_repo_status(
+        current_status="stable",
+        archived=False,
+        stars=10,
+        pushed_at=days_ago(3 * 365 + 1),
+        now=NOW,
+    ) == "stable"
+    # The verdict is not a shield against the repo disappearing on GitHub.
+    assert transform.resolve_repo_status(
+        current_status="stable",
+        archived=True,
+        stars=10,
+        pushed_at=days_ago(400),
+        now=NOW,
+    ) == "gone"
 
 
 def test_maps_owner_archived_repos_to_gone():
@@ -52,7 +75,28 @@ def test_maps_owner_archived_repos_to_gone():
     ) == "gone"
 
 
-def test_promotes_peer_reviewed_papers_to_stable_before_idle_rules():
+def test_active_freshness_outranks_the_stable_verdict():
+    # The core precedence: a stable repo that keeps pushing reads as active.
+    assert transform.resolve_repo_status(
+        current_status="stable",
+        archived=False,
+        stars=10,
+        pushed_at=days_ago(119),
+        now=NOW,
+    ) == "active"
+    # Uniform for newly promoted records too — an auto-stable qualifier
+    # pushed this week reads as active, not stable.
+    assert transform.resolve_repo_status(
+        current_status="stale",
+        archived=False,
+        stars=3,
+        pushed_at=days_ago(10),
+        paper_venue="Nature Biotechnology",
+        now=NOW,
+    ) == "active"
+
+
+def test_promotes_quiet_peer_reviewed_papers_to_stable():
     assert transform.resolve_repo_status(
         current_status="active",
         archived=False,
@@ -67,15 +111,15 @@ def test_promotes_popular_preprint_backed_repos_honoring_curator_veto():
     base = {
         "current_status": "active",
         "archived": False,
-        "pushed_at": days_ago(10),
+        "pushed_at": days_ago(200),
         "paper_venue": "arXiv",
         "now": NOW,
     }
     assert transform.resolve_repo_status(**{**base, "stars": 1500}) == "stable"
-    assert transform.resolve_repo_status(**{**base, "stars": 900}) == "active"
+    assert transform.resolve_repo_status(**{**base, "stars": 900}) == "stale"
     assert transform.resolve_repo_status(
         **{**base, "stars": 1500, "auto_stable_exempt": True}
-    ) == "active"
+    ) == "stale"
 
 
 def test_archives_nursery_repos_past_180_idle_days_established_past_3_years():

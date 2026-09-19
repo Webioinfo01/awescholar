@@ -328,10 +328,12 @@ def enrich_papers(
         clue, meta = hit
         a["paperMeta"] = meta
         # A freshly attached venue can change the status verdict — journal/
-        # conference papers qualify for auto-stable at any star count. Without
-        # this re-derivation, paper-backed agents linger in the pre-paper
-        # status their add-time derivation froze in. Protected statuses
-        # (stable, no-repo) resolve to themselves, so this only ever promotes.
+        # conference papers qualify for auto-stable at any star count, though
+        # the verdict only surfaces on quiet records (an actively-pushed one
+        # reads active; freshness outranks the stable verdict). Without this
+        # re-derivation, paper-backed agents linger in the pre-paper status
+        # their add-time derivation froze in. Protected no-repo resolves to
+        # itself, so that status never moves here.
         prev_status = str(a.get("status") or "")
         status = resolve_repo_status(
             current_status=prev_status,

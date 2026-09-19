@@ -9,6 +9,7 @@ from typing import Literal, NamedTuple
 
 from awescholar.agentx.papers import venue_tier
 from awescholar.agentx.policy import (
+    ACTIVE_IDLE_DAYS,
     AUTO_STABLE_MIN_STARS,
     ESTABLISHED_ARCHIVE_IDLE_DAYS,
     NURSERY_ARCHIVE_IDLE_DAYS,
@@ -88,8 +89,8 @@ def resolve_license_spdx_id(
 # --- Freshness ----------------------------------------------------------------
 
 def freshness_status(pushed_at: datetime, now: datetime | None = None) -> str:
-    """Freshness from last push: stale after 120 idle days, active otherwise."""
-    return "stale" if idle_days(pushed_at, now) > 120 else "active"
+    """Freshness from last push: stale after ACTIVE_IDLE_DAYS, active otherwise."""
+    return "stale" if idle_days(pushed_at, now) > ACTIVE_IDLE_DAYS else "active"
 
 
 def idle_days(pushed_at: datetime, now: datetime | None = None) -> float:
@@ -100,13 +101,13 @@ def idle_days(pushed_at: datetime, now: datetime | None = None) -> float:
 
 # --- Status policy ------------------------------------------------------------
 
-# Statuses the refresh job must never rederive:
-# - stable: an editorial (or auto-granted, sticky) verdict that quiet is
-#   expected — see qualifies_auto_stable for the automatic path
+# The status the refresh job must never rederive:
 # - no-repo: nothing to track
-# Everything else — including archived and gone — is derived from live
-# inputs each refresh, so recovery never needs a human edit.
-_PROTECTED_STATUSES: frozenset[str] = frozenset({"stable", "no-repo"})
+# Everything else — including stable and gone — is derived from live inputs
+# each refresh, so recovery never needs a human edit.  The stable verdict is
+# not protected but sticky by construction: it resurfaces on its own once the
+# repo goes quiet (see resolve_repo_status).
+_PROTECTED_STATUSES: frozenset[str] = frozenset({"no-repo"})
 
 
 def qualifies_auto_stable(stars: int, paper_venue: str) -> bool:
@@ -142,18 +143,22 @@ def resolve_repo_status(
 ) -> str:
     """Unified refresh status policy shared by the snapshot command.  In order:
 
-    - Protected statuses are kept as-is: a stable verdict survives anything,
-      no-repo has nothing to rederive.
+    - no-repo is kept as-is: nothing to rederive.
     - A repo archived by its owner is gone: the code may still be readable
       but it is frozen for good.  Un-archiving the repo lifts this on the
       next refresh.
-    - The auto-stable paper rule promotes qualifying repos (unless exempt).
-      It runs before the idle rules, so a peer-reviewed project that went
-      quiet reads as stable, not archived.
+    - Active freshness outranks the stable verdict: a stable (or
+      stable-qualifying) repo that keeps pushing reads as active, not
+      stable.  The verdict is not lost — once the repo goes quiet past
+      ACTIVE_IDLE_DAYS it surfaces again below.
+    - A quiet stable record stays stable: quiet is expected, so it never
+      slides into stale or archived.  Quiet non-stable records qualifying
+      for the auto-stable paper rule (unless exempt) are promoted here.
     - A repo idle past its tier's limit (180 days under the nursery star
       line, 3 years above) is archived — reversible by any fresh push.
-    - Everything else is freshness from pushedAt: active within 120 days,
-      stale beyond.  Missing pushedAt keeps the current status.
+    - Everything else is freshness from pushedAt: active within
+      ACTIVE_IDLE_DAYS, stale beyond.  Missing pushedAt keeps the current
+      status.
 
     Repos that vanish entirely (404) bypass this policy in the refresh
     command and are written to "gone" directly.
@@ -162,6 +167,10 @@ def resolve_repo_status(
         return current_status
     if archived:
         return "gone"
+    if pushed_at is not None and idle_days(pushed_at, now) <= ACTIVE_IDLE_DAYS:
+        return "active"
+    if current_status == "stable":
+        return "stable"
     if not auto_stable_exempt and qualifies_auto_stable(stars, paper_venue):
         return "stable"
     if pushed_at is None:

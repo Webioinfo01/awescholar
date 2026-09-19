@@ -110,7 +110,14 @@ def test_enrich_doi_clue_writes_paper_meta(tmp_path, monkeypatch):
     path = _snapshot_file(
         tmp_path,
         [
-            _agent("alpha-agent", paper="https://doi.org/10.1038/s41586-026-00000-0"),
+            # Quiet repo: the journal-venue promotion only surfaces on quiet
+            # records — an actively-pushed one reads active (freshness
+            # outranks the stable verdict).
+            _agent(
+                "alpha-agent",
+                paper="https://doi.org/10.1038/s41586-026-00000-0",
+                pushedAt="2020-01-01T00:00:00Z",
+            ),
             _agent("beta-agent"),  # description carries no precise clue
         ],
     )

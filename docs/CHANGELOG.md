@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changes
+
+- AgentX status policy: active freshness now outranks the `stable` verdict — a stable (or stable-qualifying) repo that keeps pushing within `ACTIVE_IDLE_DAYS` (120) reads `active`; once quiet past 120 days the stable verdict resurfaces on its own, so a quiet stable record still never slides into `stale` or `archived` (`resolve_repo_status` reorders the freshness check ahead of the verdict). Two consequences: `stable` leaves `_PROTECTED_STATUSES` (only `no-repo` is never rederived), and a stable record whose owner archives the repo on GitHub now maps to `gone` like every other status — the verdict was never a shield against the repo disappearing.
+
 ## v0.3.3
 
 New primary AgentX category 'reviews' ("Reviews & Surveys") — registry entries whose deliverable is a curated reading list: survey/awesome-list companion repos. Slots between 'datasets' and 'safety-security' in CATEGORY_ORDER. validate.py accepts the slug; intake via 'updater add --agentx --category reviews'.
